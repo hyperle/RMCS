@@ -1,0 +1,49 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::simulator::MotorBackdataBridge -> motor_backdata_bridge
+      - rmcs_core::simulator::MotorControlBridge -> motor_control_bridge
+      - rmcs_core::controller::DesiredVelocityPublisher -> desired_velocity_publisher
+      - rmcs_core::controller::pid::PidController -> velocity_pid_controller
+      - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
+
+
+motor_backdata_bridge:
+  ros__parameters:
+    simulated_motor_angle: /motor/angle
+    simulated_motor_velocity: /motor/velocity
+    simulated_motor_torque: /motor/torque
+
+motor_control_bridge:
+  ros__parameters:
+    simulated_motor_control_torque: /control/torque
+
+desired_velocity_publisher:
+  ros__parameters:
+    desired_velocity: 50.0
+
+velocity_pid_controller:
+  ros__parameters:
+    measurement: /motor/velocity      # 测量值来自电机速度
+    setpoint: /desired_velocity       # 设置点来自固定速度发布器
+    feedforward: 0.0                  # 前馈为0
+    control: /control/torque          # 输出控制量到扭矩控制
+    kp: 0.5                           # 比例增益 - 需要调整
+    ki: 0.1                           # 积分增益 - 需要调整
+    kd: 0.01                          # 微分增益 - 需要调整
+    integral_min: -50.0               # 积分项下限
+    integral_max: 50.0                # 积分项上限
+    integral_split_min: -0.1          # 积分分离下限
+    integral_split_max: 0.1           # 积分分离上限
+    output_min: -100.0                # 输出下限
+    output_max: 100.0                 # 输出上限
+
+value_broadcaster:
+  ros__parameters:
+    forward_list:
+      - /desired_velocity
+      - /motor/velocity
+      - /control/torque
+      - /motor/angle
+      - /motor/torque

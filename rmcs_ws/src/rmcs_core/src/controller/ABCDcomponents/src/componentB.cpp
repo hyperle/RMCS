@@ -23,9 +23,7 @@ public:
   
         auto& sum_output = *sum_output_;
         sum_output = sin_value + cos_value;
-        
-        // 可选：记录日志（调试用）
-        // RCLCPP_DEBUG(get_logger(), "sin: %f, cos: %f, sum: %f", sin_value, cos_value, sum_output);
+    
     }
 
 private:

@@ -3,35 +3,23 @@ rmcs_executor:
     update_rate: 1000.0
     components:
       - rmcs_core::controller::SinCosGenerator -> sin_cos_generator
-      - rmcs_core::controller::componentB -> component_b
-      - rmcs_core::controller::DesiredVelocityPublisher -> desired_velocity_publisher
-      - rmcs_core::broadcaster::ValueBroadcaster -> sin_broadcaster
-      - rmcs_core::broadcaster::ValueBroadcaster -> cos_broadcaster
-      - rmcs_core::broadcaster::ValueBroadcaster -> sum_broadcaster
-      - rmcs_core::broadcaster::ValueBroadcaster -> velocity_broadcaster
+      - rmcs_core::controller::ComponentB -> component_b
+      - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
+
 
 
 
 sin_cos_generator:
   ros__parameters:
-    omega: 1.0
+    omega: 10.0
 
-sin_broadcaster:
+desired_velocity_publisher:
   ros__parameters:
-    input: /sin
-    topic: /visualization/sin
+    desired_velocity: 50.0
 
-cos_broadcaster:
+value_broadcaster:
   ros__parameters:
-    input: /cos
-    topic: /visualization/cos
-
-sum_broadcaster:
-  ros__parameters:
-    input: /sum
-    topic: /visualization/sum
-
-velocity_broadcaster:
-  ros__parameters:
-    input: /desired_velocity
-    topic: /visualization/desired_velocity
+    forward_list:
+      - /sin
+      - /cos
+      - /sum

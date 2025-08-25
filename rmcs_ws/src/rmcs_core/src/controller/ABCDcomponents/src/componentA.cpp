@@ -8,8 +8,7 @@ class SinCosGenerator final : public rmcs_executor::Component, public rclcpp::No
 public:
     explicit SinCosGenerator() noexcept
         : Node{"sin_cos_generator", rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true)} {
-        
-        this->declare_parameter("omega", 1.0);
+  
         omega_ = this->get_parameter("omega").as_double();
         RCLCPP_INFO(get_logger(), "Initialized with omega: %f", omega_);
         
@@ -22,8 +21,7 @@ public:
     void update() override {
         auto current_time = this->now();
         auto elapsed_time = (current_time - start_time_).seconds();
-        
-        // 计算sin和cos值
+     
         auto& sin_output = *sin_output_;
         auto& cos_output = *cos_output_;
         
