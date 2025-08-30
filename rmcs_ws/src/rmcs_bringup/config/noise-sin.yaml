@@ -1,0 +1,21 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs_core::controller::NoiseSinGenerator -> noise_sin_generator
+      - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
+
+
+
+
+noise_sin_generator:
+  ros__parameters:
+    omega: 1.0
+    amplitude: 0.2
+
+value_broadcaster:
+  ros__parameters:
+    forward_list:
+      - /component/generator/noise_sin
+      - /component/generator/clean_sin
+      - /component/generator/random_noise

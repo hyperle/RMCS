@@ -12,8 +12,8 @@ public:
         omega_ = this->get_parameter("omega").as_double();
         RCLCPP_INFO(get_logger(), "Initialized with omega: %f", omega_);
         
-        register_output("/sin", sin_output_, 0.0);
-        register_output("/cos", cos_output_, 0.0);
+        register_output("/component/generator/sin", sin_output_, 0.0);
+        register_output("/component/generator/cos", cos_output_, 0.0);
         
         start_time_ = this->now();
     }

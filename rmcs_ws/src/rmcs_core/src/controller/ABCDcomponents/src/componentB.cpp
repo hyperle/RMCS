@@ -10,10 +10,10 @@ public:
         
         RCLCPP_INFO(get_logger(), "Initializing ComponentB");
         
-        register_input("/sin", sin_input_);
-        register_input("/cos", cos_input_);
+        register_input("/component/generator/sin", sin_input_);
+        register_input("/component/generator/cos", cos_input_);
       
-        register_output("/sum", sum_output_, 0.0);
+        register_output("/component/generator/sum", sum_output_, 0.0);
     }
     
     void update() override {

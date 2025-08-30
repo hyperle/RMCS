@@ -13,13 +13,9 @@ sin_cos_generator:
   ros__parameters:
     omega: 10.0
 
-desired_velocity_publisher:
-  ros__parameters:
-    desired_velocity: 50.0
-
 value_broadcaster:
   ros__parameters:
     forward_list:
-      - /sin
-      - /cos
-      - /sum
+      - /component/generator/sin
+      - /component/generator/cos
+      - /component/generator/sum

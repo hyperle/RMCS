@@ -26,5 +26,4 @@ install(DIRECTORY
   DESTINATION include
 )
 
-# 包的元信息
 ament_package()

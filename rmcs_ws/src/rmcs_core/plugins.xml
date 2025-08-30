@@ -107,6 +107,9 @@
   <class type="rmcs_core::controller::DesiredVelocityPublisher" base_class_type="rmcs_executor::Component">
     <description> run Component</description>
   </class>
+  <class type="rmcs_core::controller::NoiseSinGenerator" base_class_type="rmcs_executor::Component">
+    <description> run Component</description>
+  </class>
   <class type="rmcs_core::simulator::MotorBackdataBridge" base_class_type="rmcs_executor::Component">
     <description> run Component</description>
   </class>
