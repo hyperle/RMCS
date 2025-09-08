@@ -3,7 +3,6 @@ rmcs_executor:
     update_rate: 1000.0
     components:
       - rmcs_core::controller::NoiseSinGenerator -> noise_sin_generator
-      - rmcs_core::controller::Filter -> filter
       - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
 
@@ -11,14 +10,7 @@ noise_sin_generator:
   ros__parameters:
     omega: 1.0
     amplitude: 0.2
-
-filter:
-  ros__parameters:
-    alpha: 0.01
-
 value_broadcaster:
   ros__parameters:
     forward_list:
       - /component/generator/noise_sin
-      - /filter/lowpass/output
-      - /filter/median/output

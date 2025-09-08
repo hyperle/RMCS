@@ -18,12 +18,11 @@ public:
         start_time_ = this->now();
         
         register_output("/component/generator/noise_sin", noise_sin_output_, 0.0);
-        register_output("/component/generator/random_noise", noise_output_, 0.0);
-        register_output("/component/generator/clean_sin", clean_sin_output_, 0.0);
         
         gen_ = std::mt19937(std::random_device{}());
         dist_ = std::uniform_real_distribution<>(-amplitude_, amplitude_);
 
+        current_noise_.store(0.0);
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(1), 
             [this]() {
@@ -36,28 +35,27 @@ public:
         auto elapsed_time = (current_time - start_time_).seconds();
      
         double clean_sin = std::sin(omega_ * elapsed_time);
-        *clean_sin_output_ = clean_sin;
         
-        double current_noise = *noise_output_;
+        double current_noise = current_noise_.load();
         
         *noise_sin_output_ = clean_sin + current_noise;
     }
 
 private:
     void generate_noise() {
-        *noise_output_ = dist_(gen_);
+        double new_noise = dist_(gen_);
+        current_noise_.store(new_noise);
     }
 
     double amplitude_; 
     double omega_;
     rclcpp::Time start_time_;
 
-    OutputInterface<double> noise_output_;
     OutputInterface<double> noise_sin_output_;
-    OutputInterface<double> clean_sin_output_;
-
     std::mt19937 gen_;
     std::uniform_real_distribution<> dist_;
+
+    std::atomic<double> current_noise_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
