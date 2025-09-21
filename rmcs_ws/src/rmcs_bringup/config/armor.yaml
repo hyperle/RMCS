@@ -10,11 +10,13 @@ armor_detect:
     exposure_time: 5000
     gain: 1.0
     binary_threshold: 130
-    min_contour_area: 100
+    min_contour_area: 200
     max_angle_diff: 160.0
     min_length_ratio: 0.5
     max_length_ratio: 2.0
-    red_lower: [0, 50, 50]
-    red_upper: [255, 255, 255]
-    blue_lower: [100, 100, 100]
-    blue_upper: [140, 255, 255]
+    red_lower1: [0, 100, 100]   
+    red_upper1: [40, 255, 255]   
+    red_lower2: [160, 100, 100]  
+    red_upper2: [180, 255, 255] 
+    blue_lower: [40, 0, 0]   
+    blue_upper: [160, 255, 255]  

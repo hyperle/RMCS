@@ -33,13 +33,17 @@ public:
         min_length_ratio_ = get_parameter("min_length_ratio").as_double();
         max_length_ratio_ = get_parameter("max_length_ratio").as_double();
         // 获取颜色范围参数
-        auto red_lower = get_parameter("red_lower").as_integer_array();
-        auto red_upper = get_parameter("red_upper").as_integer_array();
+        auto red_lower1 = get_parameter("red_lower1").as_integer_array();
+        auto red_upper1 = get_parameter("red_upper1").as_integer_array();
+        auto red_lower2 = get_parameter("red_lower2").as_integer_array();
+        auto red_upper2 = get_parameter("red_upper2").as_integer_array();
         auto blue_lower = get_parameter("blue_lower").as_integer_array();
         auto blue_upper = get_parameter("blue_upper").as_integer_array();
 
-        red_lower_ = cv::Scalar(red_lower[0], red_lower[1], red_lower[2]);
-        red_upper_ = cv::Scalar(red_upper[0], red_upper[1], red_upper[2]);
+        red_lower1_ = cv::Scalar(red_lower1[0], red_lower1[1], red_lower1[2]);
+        red_upper1_ = cv::Scalar(red_upper1[0], red_upper1[1], red_upper1[2]);
+        red_lower2_ = cv::Scalar(red_lower2[0], red_lower2[1], red_lower2[2]);
+        red_upper2_ = cv::Scalar(red_upper2[0], red_upper2[1], red_upper2[2]);
         blue_lower_ = cv::Scalar(blue_lower[0], blue_lower[1], blue_lower[2]);
         blue_upper_ = cv::Scalar(blue_upper[0], blue_upper[1], blue_upper[2]);
 
@@ -167,10 +171,12 @@ private:
         
         cv::Mat roi_hsv = hsv(roi);
         
-        cv::Mat red_mask;
-        cv::inRange(roi_hsv, red_lower_, red_upper_, red_mask);
+        cv::Mat red_mask1, red_mask2;
+        cv::inRange(roi_hsv, red_lower1_, red_upper1_, red_mask1);
+        cv::inRange(roi_hsv, red_lower2_, red_upper2_, red_mask2);
+        cv::Mat red_mask = red_mask1 | red_mask2;
         int red_pixels = cv::countNonZero(red_mask);
-        
+                
         cv::Mat blue_mask;
         cv::inRange(roi_hsv, blue_lower_, blue_upper_, blue_mask);
         int blue_pixels = cv::countNonZero(blue_mask);
@@ -180,7 +186,7 @@ private:
         } else if (blue_pixels > red_pixels && blue_pixels > 5) {
             return "blue";
         }
-        
+            
         return "";
     }
 
@@ -194,7 +200,7 @@ private:
             if (bar.color == "red") {
                 red_bars.push_back(bar);
             } else if (bar.color == "blue") {
-                //blue_bars.push_back(bar);
+                blue_bars.push_back(bar);
             }
         }
         
@@ -291,8 +297,10 @@ private:
     double min_length_ratio_;
     double max_length_ratio_;
     
-    cv::Scalar red_lower_;
-    cv::Scalar red_upper_;
+    cv::Scalar red_lower1_;
+    cv::Scalar red_upper1_;
+    cv::Scalar red_lower2_;
+    cv::Scalar red_upper2_;
     cv::Scalar blue_lower_;
     cv::Scalar blue_upper_;
 };
