@@ -29,8 +29,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/src) 
 include_directories(${PROJECT_SOURCE_DIR}/librmcs)
 include_directories(${OpenCV_INCLUDE_DIRS})
-
 include_directories(SYSTEM "/usr/include/libusb-1.0")
+
 target_link_libraries(${PROJECT_NAME} -lusb-1.0)
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} -lpthread)
 target_link_libraries(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/../../install/lib/libhikcamera.so)

@@ -2,7 +2,7 @@ rmcs_executor:
   ros__parameters:
     update_rate: 1000.0
     components:
-      - rmcs_core::armordetector::ArmorPredictor -> armor_detect
+      - rmcs_core::armor_detector::GetCameraFrame -> armor_detect
 
 armor_detect:
   ros__parameters:
