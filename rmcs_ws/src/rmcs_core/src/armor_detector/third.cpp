@@ -24,14 +24,7 @@ struct LightBar {
         float dx = bottom.x - top.x;
         float dy = bottom.y - top.y;
         angle = std::atan2(dy, dx) * 180 / CV_PI;
-        if (angle < 0) angle += 180;
     }
-};
-
-struct Armor {
-    std::vector<cv::Point2f> corners;
-    std::string color;
-    cv::Point2f center;
 };
 
 class ArmorPredictor
@@ -63,17 +56,6 @@ public:
         red_upper2_ = cv::Scalar(red_upper2[0], red_upper2[1], red_upper2[2]);
         blue_lower_ = cv::Scalar(blue_lower[0], blue_lower[1], blue_lower[2]);
         blue_upper_ = cv::Scalar(blue_upper[0], blue_upper[1], blue_upper[2]);
-
-        camera_matrix_ = (cv::Mat_<double>(3, 3) << 
-            1000.0, 0.0, 320.0,
-            0.0, 1000.0, 240.0,
-            0.0, 0.0, 1.0);
-        dist_coeffs_ = (cv::Mat_<double>(1, 5) << 0.0, 0.0, 0.0, 0.0, 0.0);
-
-        armor_width_ = 0.14;
-        armor_height_ = 0.125;
-        LightBar light_bar;
-        light_bar.length = 0.6;
 
         camera_thread_ = std::thread(&ArmorPredictor::camera_frame_update, this);
     }
@@ -137,8 +119,7 @@ private:
             float height = rotated_rect.size.height;
             float aspect_ratio = (width > height) ? width / height : height / width;
             
-            //
-            if (aspect_ratio < 3.0 || aspect_ratio > 24.0) continue;
+            if (aspect_ratio < 3.0 || aspect_ratio > 30.0) continue;
             
             cv::Point2f center = rotated_rect.center;
             std::string color = detectColor(hsv, center);
@@ -156,10 +137,197 @@ private:
                 }
             }
         }
-        std::vector<Armor> detected_armors = pairLightBars(light_bars, image);
-        if (!detected_armors.empty()) {
-            calculateAndDisplayEulerAngles(detected_armors[0], image);
+
+        /*
+        if (light_bars.size() == 1) {
+            detectPotentialLightBars(hsv, final_mask, light_bars, image);
+            findOccludedLightBar(hsv, final_mask, light_bars[0], light_bars, image);
         }
+        */
+
+        pairLightBars(light_bars, image);
+    }
+
+    void detectPotentialLightBars(const cv::Mat& hsv, const cv::Mat& mask, std::vector<LightBar>& light_bars, cv::Mat& image) {
+        if (light_bars.empty()) return;
+        
+        for (auto& bar : light_bars) {
+            cv::Point2f direction(cos(bar.angle * CV_PI / 180.0), sin(bar.angle * CV_PI / 180.0));
+            
+            for (int side = -1; side <= 1; side += 2) {
+                float search_distance = bar.length * 4.0f; 
+                cv::Point2f start_point = bar.center;
+                cv::Point2f end_point = bar.center + direction * search_distance * side;
+                
+                cv::Rect roi(
+                    std::min(start_point.x, end_point.x) - bar.length/2,
+                    std::min(start_point.y, end_point.y) - bar.length/2,
+                    std::abs(end_point.x - start_point.x) + bar.length,
+                    std::abs(end_point.y - start_point.y) + bar.length
+                );
+                
+                roi &= cv::Rect(0, 0, mask.cols, mask.rows);
+                if (roi.width <= 0 || roi.height <= 0) continue;
+                
+                cv::Mat roi_mask = mask(roi);
+                
+                std::vector<std::vector<cv::Point>> roi_contours;
+                cv::findContours(roi_mask, roi_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+                
+                for (const auto& contour : roi_contours) {
+                    if (cv::contourArea(contour) < 15) continue;
+                    cv::RotatedRect potential_rect = cv::minAreaRect(contour);
+                    
+                    float width = potential_rect.size.width;
+                    float height = potential_rect.size.height;
+                    float aspect_ratio = (width > height) ? width / height : height / width;
+                    
+                    if (aspect_ratio < 1.5 || aspect_ratio > 6.0) continue; 
+                    potential_rect.center.x += roi.x;
+                    potential_rect.center.y += roi.y;
+                    
+                    cv::Point2f center = potential_rect.center;
+                    std::string color = detectColor(hsv, center);
+                    if (color.empty() || color != enermy_color_) continue;
+                    
+                    LightBar potential_bar = extractLightBar(potential_rect, color);
+                    float angle_diff = std::abs(bar.angle - potential_bar.angle);
+                    if (angle_diff > 20.0 && angle_diff < 160.0) continue;
+                    
+                    cv::Point2f center_vec = potential_bar.center - bar.center;
+                    float center_angle = std::atan2(center_vec.y, center_vec.x) * 180 / CV_PI;
+                    
+                    float short_angle = bar.angle + 90.0;
+                    short_angle = std::fmod(short_angle + 180.0, 180.0);
+                    center_angle = std::fmod(center_angle + 180.0, 180.0);
+                    
+                    float angle_diff2 = std::abs(center_angle - short_angle);
+                    if (angle_diff2 > 20.0 && angle_diff2 < 160.0) continue;
+                    
+                    float distance = cv::norm(center_vec);
+                    if (distance > bar.length * 4.0 || distance < bar.length * 0.3) continue;
+                    
+                    float height_diff = std::abs(bar.center.y - potential_bar.center.y);
+                    if (height_diff > bar.length * 1.0) continue;
+                    
+                    light_bars.push_back(potential_bar);
+                    
+                    cv::Point2f vertices[4];
+                    potential_rect.points(vertices);
+                    for (int i = 0; i < 4; i++) {
+                        cv::line(image, vertices[i], vertices[(i+1)%4], cv::Scalar(0, 255, 255), 2); // 黄色表示潜在灯条
+                    }
+                    
+                    cv::line(image, bar.center, potential_bar.center, cv::Scalar(255, 255, 0), 1);
+                    
+                    break;
+                }
+            }
+        }
+    }
+
+    void findOccludedLightBar(const cv::Mat& hsv, const cv::Mat& mask, const LightBar& bar, 
+                             std::vector<LightBar>& light_bars, cv::Mat& image) {
+        cv::Point2f direction(cos(bar.angle * CV_PI / 180.0), sin(bar.angle * CV_PI / 180.0));
+        
+        cv::Point2f normal(-direction.y, direction.x);
+        
+        for (int side = -1; side <= 1; side += 2) {
+            float search_distance = bar.length * 2.0f;
+            
+            cv::Point2f search_center = bar.center + normal * search_distance * side;
+            
+            cv::Rect roi(
+                search_center.x - bar.length,
+                search_center.y - bar.length/2,
+                bar.length * 2,
+                bar.length
+            );
+            
+            roi &= cv::Rect(0, 0, mask.cols, mask.rows);
+            if (roi.width <= 0 || roi.height <= 0) continue;
+            
+            cv::Mat roi_mask = mask(roi);
+            
+            std::vector<std::vector<cv::Point>> roi_contours;
+            cv::findContours(roi_mask, roi_contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            
+            for (const auto& contour : roi_contours) {
+                //
+                if (cv::contourArea(contour) < 30) continue; 
+                cv::RotatedRect potential_rect = cv::minAreaRect(contour);
+                
+                float width = potential_rect.size.width;
+                float height = potential_rect.size.height;
+                float aspect_ratio = (width > height) ? width / height : height / width;
+                
+                if (aspect_ratio < 1.2 || aspect_ratio > 5.0) continue; 
+
+                potential_rect.center.x += roi.x;
+                potential_rect.center.y += roi.y;
+                
+                cv::Point2f center = potential_rect.center;
+                std::string color = detectColor(hsv, center);
+                if (color.empty() || color != enermy_color_) continue;
+                
+                LightBar potential_bar = extractLightBar(potential_rect, color);
+                float angle_diff = std::abs(bar.angle - potential_bar.angle);
+                if (angle_diff > 25.0 && angle_diff < 155.0) continue;
+                
+                cv::Point2f center_vec = potential_bar.center - bar.center;
+                float center_angle = std::atan2(center_vec.y, center_vec.x) * 180 / CV_PI;
+                
+                float short_angle = bar.angle + 90.0;
+                short_angle = std::fmod(short_angle + 180.0, 180.0);
+                center_angle = std::fmod(center_angle + 180.0, 180.0);
+                
+                float angle_diff2 = std::abs(center_angle - short_angle);
+                if (angle_diff2 > 25.0 && angle_diff2 < 155.0) continue;
+                
+                float distance = cv::norm(center_vec);
+                if (distance > bar.length * 3.0 || distance < bar.length * 0.5) continue;
+                
+                float height_diff = std::abs(bar.center.y - potential_bar.center.y);
+                if (height_diff > bar.length * 0.6) continue;
+                
+                light_bars.push_back(potential_bar);
+                
+                cv::Point2f vertices[4];
+                potential_rect.points(vertices);
+                for (int i = 0; i < 4; i++) {
+                    cv::line(image, vertices[i], vertices[(i+1)%4], cv::Scalar(255, 0, 255), 2);
+                }
+                
+                cv::rectangle(image, roi, cv::Scalar(0, 255, 0), 1);
+                
+                break;
+            }
+        }
+    }
+
+    LightBar extractLightBar(const cv::RotatedRect& rect, const std::string& color) {
+        cv::Point2f vertices[4];
+        rect.points(vertices);
+        
+        cv::Point2f top = (vertices[0] + vertices[1]) / 2.0f;
+        cv::Point2f bottom = (vertices[2] + vertices[3]) / 2.0f;
+        
+        if (top.y > bottom.y) {
+            std::swap(top, bottom);
+        }
+        
+        cv::Point2f center = (top + bottom) / 2.0f;
+        
+        LightBar light_bar;
+        light_bar.top = top;
+        light_bar.bottom = bottom;
+        light_bar.center = center;
+        light_bar.color = color;
+        light_bar.length = cv::norm(top - bottom);
+        light_bar.rect = rect;
+        light_bar.calculateDirection();
+        
+        return light_bar;
     }
 
     std::string detectColor(const cv::Mat& hsv, const cv::Point2f& point) {
@@ -190,12 +358,23 @@ private:
         return "";
     }
 
-    std::vector<Armor> pairLightBars(const std::vector<LightBar>& light_bars, cv::Mat& image) {
-        std::vector<Armor> armors;
+    void pairLightBars(const std::vector<LightBar>& light_bars, cv::Mat& image) {
+        if (light_bars.size() < 1) return;
+
+        std::vector<LightBar> enemy_bars;
+        for (const auto& bar : light_bars) {
+            if (bar.color == enermy_color_) {
+                enemy_bars.push_back(bar);
+            }
+        }
         
-        if (light_bars.size() < 2) return armors;
+        pairBarsOfSameColor(enemy_bars, image);
+    }
+
+    void pairBarsOfSameColor(const std::vector<LightBar>& bars, cv::Mat& image) {
+        if (bars.size() < 1) return;
         
-        std::vector<LightBar> sorted_bars = light_bars;
+        std::vector<LightBar> sorted_bars = bars;
         std::sort(sorted_bars.begin(), sorted_bars.end(), 
             [](const LightBar& a, const LightBar& b) {
                 return a.center.x < b.center.x;
@@ -206,14 +385,32 @@ private:
                 const LightBar& bar1 = sorted_bars[i];
                 const LightBar& bar2 = sorted_bars[j];
                 
-                if (bar1.color != bar2.color) continue;
-                
                 float angle_diff = std::abs(bar1.angle - bar2.angle);
                 if (angle_diff > 20.0 && angle_diff < 160.0) continue;
                 
-                //float distance = cv::norm(bar2.center - bar1.center);
-                //float avg_length = (bar1.length + bar2.length) / 2.0;
-                //if (distance > avg_length * 4.0 || distance < avg_length * 0.3) continue;
+                cv::Point2f center_vec = bar2.center - bar1.center;
+                float center_angle = std::atan2(center_vec.y, center_vec.x) * 180 / CV_PI;
+                
+                float short_angle1 = bar1.angle + 90.0;
+                float short_angle2 = bar2.angle + 90.0;
+                
+                short_angle1 = std::fmod(short_angle1 + 180.0, 180.0);
+                short_angle2 = std::fmod(short_angle2 + 180.0, 180.0);
+                center_angle = std::fmod(center_angle + 180.0, 180.0);
+                
+                float angle_diff1 = std::abs(center_angle - short_angle1);
+                float angle_diff2 = std::abs(center_angle - short_angle2);
+                
+                if (angle_diff1 > 20.0 && angle_diff1 < 160.0) continue;
+                if (angle_diff2 > 20.0 && angle_diff2 < 160.0) continue;
+                
+                float distance = cv::norm(center_vec);
+                float avg_length = (bar1.length + bar2.length) / 2.0;
+                
+                if (distance > avg_length * 4.0 || distance < avg_length * 0.3) continue;
+                
+                //float height_diff = std::abs(bar1.center.y - bar2.center.y);
+                //if (height_diff > avg_length * 0.5) continue;
                 
                 float length_ratio = std::max(bar1.length, bar2.length) / std::min(bar1.length, bar2.length);
                 if (length_ratio > 3.0) continue;
@@ -225,7 +422,7 @@ private:
                     right = &bar1;
                 }
                 
-                std::vector<cv::Point2f> armor_corners = {
+                cv::Point2f armor_corners[4] = {
                     left->top,    
                     right->top,   
                     right->bottom, 
@@ -243,101 +440,8 @@ private:
                             cv::FONT_HERSHEY_SIMPLEX, 1.0, 
                             left->color == "red" ? cv::Scalar(0, 0, 255) : cv::Scalar(255, 0, 0), 
                             2);
-                
-                Armor armor;
-                armor.corners = armor_corners;
-                armor.color = left->color;
-                armor.center = center;
-                armors.push_back(armor);
             }
         }
-        
-        return armors;
-    }
-
-    void calculateAndDisplayEulerAngles(const Armor& armor, cv::Mat& image) {
-        std::vector<cv::Point3f> object_points;
-        double half_width = armor_width_ / 2.0f;
-        double half_height = armor_height_ / 2.0f;
-        
-        object_points.emplace_back(-half_width, -half_height, 0); // 左上
-        object_points.emplace_back(half_width, -half_height, 0);  // 右上
-        object_points.emplace_back(half_width, half_height, 0);   // 右下
-        object_points.emplace_back(-half_width, half_height, 0);  // 左下
-        
-        cv::Mat rvec, tvec;
-        bool success = cv::solvePnP(object_points, armor.corners, camera_matrix_, dist_coeffs_, rvec, tvec);
-        
-        if (success) {
-            cv::Mat rotation_matrix;
-            cv::Rodrigues(rvec, rotation_matrix);
-            
-            cv::Vec3d euler_angles = rotationMatrixToEulerAngles(rotation_matrix);
-            
-            double pitch = euler_angles[0] * 180 / CV_PI;
-            double yaw = euler_angles[1] * 180 / CV_PI;
-            double roll = euler_angles[2] * 180 / CV_PI;
-            
-            std::string pitch_text = "Pitch: " + std::to_string(pitch).substr(0, 6) + " deg";
-            std::string yaw_text = "Yaw: " + std::to_string(yaw).substr(0, 6) + " deg";
-            std::string roll_text = "Roll: " + std::to_string(roll).substr(0, 6) + " deg";
-            
-            cv::putText(image, pitch_text, cv::Point(10, 30), 
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 2);
-            cv::putText(image, yaw_text, cv::Point(10, 60), 
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 2);
-            cv::putText(image, roll_text, cv::Point(10, 90), 
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 2);
-            
-            double distance = cv::norm(tvec);
-            std::string dist_text = "Distance: " + std::to_string(distance).substr(0, 6) + " m";
-            cv::putText(image, dist_text, cv::Point(10, 120), 
-                        cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 255), 2);
-        }
-    }
-
-    cv::Vec3d rotationMatrixToEulerAngles(const cv::Mat& R) {
-        double sy = sqrt(R.at<double>(0,0) * R.at<double>(0,0) + R.at<double>(1,0) * R.at<double>(1,0));
-        
-        bool singular = sy < 1e-6;
-        
-        double x, y, z;
-        if (!singular) {
-            x = atan2(R.at<double>(2,1), R.at<double>(2,2));
-            y = atan2(-R.at<double>(2,0), sy);
-            z = atan2(R.at<double>(1,0), R.at<double>(0,0));
-        } else {
-            x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
-            y = atan2(-R.at<double>(2,0), sy);
-            z = 0;
-        }
-        
-        return {x, y, z};
-    }
-
-    LightBar extractLightBar(const cv::RotatedRect& rect, const std::string& color) {
-        cv::Point2f vertices[4];
-        rect.points(vertices);
-        
-        cv::Point2f top = (vertices[0] + vertices[1]) / 2.0f;
-        cv::Point2f bottom = (vertices[2] + vertices[3]) / 2.0f;
-        
-        if (top.y > bottom.y) {
-            std::swap(top, bottom);
-        }
-        
-        cv::Point2f center = (top + bottom) / 2.0f;
-        
-        LightBar light_bar;
-        light_bar.top = top;
-        light_bar.bottom = bottom;
-        light_bar.center = center;
-        light_bar.color = color;
-        light_bar.length = cv::norm(top - bottom);
-        light_bar.rect = rect;
-        light_bar.calculateDirection();
-        
-        return light_bar;
     }
 
     rclcpp::Logger logger_;
@@ -346,10 +450,6 @@ private:
     std::thread camera_thread_;
     
     int brightness_threshold_;
-    cv::Mat camera_matrix_;
-    cv::Mat dist_coeffs_;
-    double armor_height_;
-    double armor_width_;
     std::string enermy_color_;
     cv::Scalar red_lower1_;
     cv::Scalar red_upper1_;

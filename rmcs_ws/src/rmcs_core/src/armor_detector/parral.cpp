@@ -17,7 +17,8 @@ class GetCameraFrame
     , public rclcpp::Node {
 public:
     GetCameraFrame()
-        : Node(get_component_name(), rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
+        : Node(get_component_name()
+        , rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true))
         , logger_(get_logger()) {
 
         camera_profile_.invert_image = get_parameter("invert_image").as_bool();
@@ -58,14 +59,6 @@ private:
                 red_lower1_, red_upper1_, 
                 red_lower2_, red_upper2_, 
                 blue_lower_, blue_upper_,
-                /*
-                toScalar(get_parameter("red_lower1").as_integer_array()),
-                toScalar(get_parameter("red_upper1").as_integer_array()),
-                toScalar(get_parameter("red_lower2").as_integer_array()),
-                toScalar(get_parameter("red_upper2").as_integer_array()),
-                toScalar(get_parameter("blue_lower").as_integer_array()),
-                toScalar(get_parameter("blue_upper").as_integer_array()),
-                */
                 brightness_threshold_,
                 min_contour_area_,
                 enermy_color_
