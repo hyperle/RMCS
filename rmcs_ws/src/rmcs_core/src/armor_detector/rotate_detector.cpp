@@ -8,7 +8,7 @@
 #include <rmcs_executor/component.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <thread>
-#include "detector/armordetector.hpp" 
+#include "detector/basic_detect.hpp" 
 
 namespace rmcs_core::armor_detector {
 

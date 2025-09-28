@@ -153,12 +153,9 @@ public:
             }
         }
 
-        std::vector<Armor> detected_armors = pairLightBars(light_bars, image);
-        if (!detected_armors.empty()) {
-            calculateAndDisplayEulerAngles(detected_armors[0], image);
-            displayArmorInfo(detected_armors[0], image);
-        }
-        displayDetectionInfo(light_bars.size(), detected_armors.size(), image);
+        pairLightBars(light_bars, image);
+
+
     }
 
     std::string detectColor(const cv::Mat& hsv, const cv::Point2f& point,

@@ -119,12 +119,6 @@
   <class type="rmcs_core::simulator::MotorControlBridge" base_class_type="rmcs_executor::Component">
     <description> run Component</description>
   </class>
-  <class type="rmcs_core::armordetector::AutoAim" base_class_type="rmcs_executor::Component">
-    <description>Test plugin.</description>
-  </class>
-  <class type="rmcs_core::armordetector::SingleDetector" base_class_type="rmcs_executor::Component">
-    <description>Test plugin.</description>
-  </class>
   <class type="rmcs_core::armordetector::ArmorPredictor" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>

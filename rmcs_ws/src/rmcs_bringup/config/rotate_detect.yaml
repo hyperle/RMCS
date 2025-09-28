@@ -9,12 +9,13 @@ armor_detect:
     invert_image: false
     exposure_time: 5000
     gain: 1.0
-    brightness_threshold: 100
-    enermy_color: red
+    brightness_threshold: 254       # 数值越小代表适应越暗的环境，160以下旋转矩形会抖动（矩形太大了），往上调试,上限255
+    min_contour_area: 10.0      
+    enermy_color: blue              # 调试主要针对蓝色，red_mask我还没怎么调，效果一般
     red_lower1: [0, 100, 100]   
     red_upper1: [40, 255, 255]   
     red_lower2: [160, 100, 100]  
     red_upper2: [180, 255, 255] 
-    blue_lower: [40, 0, 0]   
+    blue_lower: [80, 0, 0]   
     blue_upper: [160, 255, 255]  
-    min_contour_area: 10.0
+    
