@@ -8,7 +8,7 @@
 #include <rmcs_executor/component.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <thread>
-#include "detector/basic_detect.hpp" 
+#include "detector/rotate_armor_detect.hpp" 
 
 namespace rmcs_core::armor_detector {
 
@@ -54,7 +54,6 @@ private:
                 RCLCPP_WARN(logger_, "Empty frame received");
                 continue;
             }
-            
             armor_detector_.processFrame(camera_frame,
                 red_lower1_, red_upper1_, 
                 red_lower2_, red_upper2_, 
@@ -75,10 +74,8 @@ private:
     std::unique_ptr<hikcamera::ImageCapturer> image_capturer_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_publisher_;
     std::thread camera_thread_;
-
     int brightness_threshold_;
     double min_contour_area_;
-
     std::string enermy_color_;
 };
 

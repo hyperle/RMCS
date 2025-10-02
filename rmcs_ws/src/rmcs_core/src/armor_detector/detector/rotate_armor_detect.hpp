@@ -10,9 +10,9 @@
 namespace rmcs_core::armordetector {
 
 struct Vector {
-    double roll;    //x
-    double pitch;   //y
-    double yaw;     //z
+    double roll;      //x
+    double pitch;     //y
+    double yaw;       //z
 };
 
 class Object {
@@ -25,71 +25,102 @@ public:
     std::vector<Vector> normal_vector;
 
     void calculateFaceNormal() {
-        if (corners.size() < 4) {
-            cv::Point2f vertices[4];
-            rect.points(vertices);
-            corners = std::vector<cv::Point2f>(vertices, vertices + 4);
+        if (corners.size() < 4) return;
+
+        cv::Point3f edge1(corners[1].x - corners[0].x, 
+                          corners[1].y - corners[0].y, 0);
+        cv::Point3f edge2(corners[3].x - corners[0].x, 
+                          corners[3].y - corners[0].y, 0);
+        
+        cv::Point3f normal_3d(
+            edge1.y * edge2.z - edge1.z * edge2.y,
+            edge1.z * edge2.x - edge1.x * edge2.z,
+            edge1.x * edge2.y - edge1.y * edge2.x
+        );
+        
+        float norm = std::sqrt(normal_3d.x * normal_3d.x + 
+                            normal_3d.y * normal_3d.y + 
+                            normal_3d.z * normal_3d.z);
+        if (norm > 0) {
+            normal_3d.x /= norm;
+            normal_3d.y /= norm;
+            normal_3d.z /= norm;
         }
         
-        if (corners.size() >= 4) {
-            cv::Point3f edge1(corners[1].x - corners[0].x, 
-                            corners[1].y - corners[0].y, 0);
-            cv::Point3f edge2(corners[3].x - corners[0].x, 
-                            corners[3].y - corners[0].y, 0);
-            
-            cv::Point3f normal_3d(
-                edge1.y * edge2.z - edge1.z * edge2.y,
-                edge1.z * edge2.x - edge1.x * edge2.z,
-                edge1.x * edge2.y - edge1.y * edge2.x
-            );
-            
-            float norm = std::sqrt(normal_3d.x * normal_3d.x + 
-                                normal_3d.y * normal_3d.y + 
-                                normal_3d.z * normal_3d.z);
-            if (norm > 0) {
-                normal_3d.x /= norm;
-                normal_3d.y /= norm;
-                normal_3d.z /= norm;
-            }
-            
-            Vector normal_vec;
-            normal_vec.roll = normal_3d.x;
-            normal_vec.pitch = normal_3d.y;
-            normal_vec.yaw = normal_3d.z;
-            
-            normal_vector.clear();
-            normal_vector.push_back(normal_vec);
-        }
+        Vector normal_vec;
+        normal_vec.roll = normal_3d.x;
+        normal_vec.pitch = normal_3d.y;
+        normal_vec.yaw = normal_3d.z;
+        
+        normal_vector.clear();
+        normal_vector.push_back(normal_vec);
     }
 };
 
 class LightBar : public Object {
 public:
-    cv::Point2f top;
-    cv::Point2f bottom;
-    float length;
-    float real_length;
+    cv::Point2f top, bottom, top_mid, bottom_mid;
+    float length, real_length, angle;
 
     void calculateCenter() {
         center = (top + bottom) / 2.0f;
+    }
+
+    void calculateAngle() {
+        cv::Point2f direction = bottom - top;
+        angle = std::atan2(direction.y, direction.x);
+    }
+    void calculateMidPoints() {
+        cv::Point2f vertices[4];
+        rect.points(vertices);
+        
+        std::vector<cv::Point2f> top_points, bottom_points;
+        for (auto & vertice : vertices) {
+            if (vertice.y < center.y) {
+                top_points.push_back(vertice);
+            } else {
+                bottom_points.push_back(vertice);
+            }
+        }
+        
+        if (top_points.size() == 2) {
+            top_mid = (top_points[0] + top_points[1]) / 2.0f;
+        }
+        if (bottom_points.size() == 2) {
+            bottom_mid = (bottom_points[0] + bottom_points[1]) / 2.0f;
+        }
     }
 };
 
 class Armor : public Object {
 public:
-    float width;
-    float height;
+    float width, height, pairing_confidence;
     double distance;
     std::pair<int, int> lightbar_ids;
     cv::Vec3d euler_angles;
-    float pairing_confidence;
+};
+
+class Car : public Armor {
+public:
+    int id;
+    std::vector<Armor> armors;
+    Vector rotate_center;
+    double velocity, acceleration, angular_velocity;
+
+    void calculateRotateCenter() {
+
+    }
+
+    void armorPrediction() {
+
+    }
 };
 
 class ArmorDetector {
 private:
     int next_light_bar_id_ = 1;
     std::set<int> paired_light_bar_ids_;
-
+    
     cv::Scalar red_lower1_, red_upper1_, red_lower2_, red_upper2_, blue_lower_, blue_upper_;
 
 public:
@@ -173,12 +204,25 @@ public:
                 }
             }
         }
+        
+        for (auto& light_bar : light_bars) {
+            light_bar.calculateAngle();
+            // 绘制灯条角度信息,调试好参数后可以删去，但是没有第二块装甲板，目前调不了参数（距离与角度）
+            drawLightBarInfo(image, light_bar);
+        }
+
         std::vector<Armor> detected_armors = pairLightBars(light_bars, image);
+        
+        for (auto& armor : detected_armors) {
+            armor.calculateFaceNormal();
+            drawArmorNormal(image, armor);
+        }
+
         if (!detected_armors.empty()) {
             calculateAndDisplayEulerAngles(detected_armors[0], image);
-        }
-          
+        }                  
     }
+    
 
 private:
     LightBar extractLightBar(const cv::RotatedRect& rect, const std::string& color) {
@@ -203,6 +247,7 @@ private:
         light_bar.corners = std::vector<cv::Point2f>(vertices, vertices + 4);
         
         light_bar.calculateCenter();
+        light_bar.calculateMidPoints();
         
         return light_bar;
     }
@@ -216,16 +261,9 @@ private:
         
         if (roi.width <= 0 || roi.height <= 0) return "";
 
-        cv::Mat roi_hsv = hsv(roi);
-
-        cv::Mat red_mask1, red_mask2;
-        cv::inRange(roi_hsv, red_lower1_, red_upper1_, red_mask1);
-        cv::inRange(roi_hsv, red_lower2_, red_upper2_, red_mask2);
-        cv::Mat red_mask_roi = red_mask1 | red_mask2;
+        cv::Mat red_mask_roi = red_mask(roi);
+        cv::Mat blue_mask_roi = blue_mask(roi);
         int red_pixels = cv::countNonZero(red_mask_roi);
-                
-        cv::Mat blue_mask_roi;
-        cv::inRange(roi_hsv, blue_lower_, blue_upper_, blue_mask_roi);
         int blue_pixels = cv::countNonZero(blue_mask_roi);
 
 
@@ -252,41 +290,31 @@ private:
         std::vector<Armor> armors;
         if (light_bars.size() < 2) {
             return armors;
-        
-        for (auto& bar : light_bars) {
-            if (bar.id == 0) {
-                bar.id = next_light_bar_id_++;
-            }
-            bar.calculateFaceNormal();
         }
-        
-        std::set<int> paired_ids;
-        
-        for (size_t i = 0; i < light_bars.size(); ++i) {
 
+        std::set<int> paired_ids;
+
+        for (size_t i = 0; i < light_bars.size(); ++i) {
             if (paired_ids.find(light_bars[i].id) != paired_ids.end()) {
                 continue;
             }
             
-            std::vector<LightBar*> neighbors = findNeighbors(light_bars, i, 2);
-            
-            for (LightBar* neighbor : neighbors) {
-                if (neighbor->id == light_bars[i].id || 
-                    paired_ids.find(neighbor->id) != paired_ids.end()) {
+            for (size_t j = i + 1; j < light_bars.size(); ++j) {
+                if (paired_ids.find(light_bars[j].id) != paired_ids.end()) {
                     continue;
                 }
                 
-                float confidence = evaluatePairSimple(light_bars[i], *neighbor);
+                float confidence = evaluatePair(light_bars[i], light_bars[j]);
                 
-                if (confidence > 0.001f) {
-                    Armor armor = createArmorFromPair(light_bars[i], *neighbor, confidence);
+                if (confidence > 0.8f) {
+                    Armor armor = createArmorFromPair(light_bars[i], light_bars[j], confidence);
                     armors.push_back(armor);
                     
                     paired_ids.insert(light_bars[i].id);
-                    paired_ids.insert(neighbor->id);
+                    paired_ids.insert(light_bars[j].id);
                     
                     if (!image.empty()) {
-                        drawArmorPair(image, armor, light_bars[i], *neighbor);
+                        drawArmorPair(image, armor, light_bars[i], light_bars[j]);
                     }
                     break;
                 }
@@ -294,68 +322,65 @@ private:
         }
         return armors;
     }
-    }
 
-    std::vector<LightBar*> findNeighbors(const std::vector<LightBar>& bars, size_t center_idx, int max_neighbors) {
-        std::vector<LightBar*> neighbors;
-        const LightBar& center_bar = bars[center_idx];
-        
-        std::vector<std::pair<float, LightBar*>> distance_pairs;
-        
-        for (size_t i = 0; i < bars.size(); ++i) {
-            if (i == center_idx) continue;
-            
-            float distance = cv::norm(bars[i].center - center_bar.center);
-            distance_pairs.emplace_back(distance, const_cast<LightBar*>(&bars[i]));
-        }
-        
-        if (distance_pairs.size() > max_neighbors * 2) {
-            std::partial_sort(
-                distance_pairs.begin(), 
-                distance_pairs.begin() + max_neighbors * 2, 
-                distance_pairs.end(),
-                [](const auto& a, const auto& b) { return a.first < b.first; }
-            );
-            
-            for (int i = 0; i < max_neighbors * 2; ++i) {
-                neighbors.push_back(distance_pairs[i].second);
-            }
-        } else {
-            for (const auto& pair : distance_pairs) {
-                neighbors.push_back(pair.second);
-            }
-        }
-        
-        return neighbors;
-    }
-
-    float evaluatePairSimple(const LightBar& bar1, const LightBar& bar2) {
+    float evaluatePair(const LightBar& bar1, const LightBar& bar2) {
         if (bar1.color != bar2.color) {
             return 0.0f;
         }
         
         float confidence = 1.0f;
         
-        confidence *=calculateNormalAngleDifference(bar1, bar2);
-        
+        float angle_diff = calculateAngleDifference(bar1, bar2);
+        float angle_confidence = 1.0f - (angle_diff / (CV_PI / 2));
+        confidence *= angle_confidence;
+
         float distance = cv::norm(bar2.center - bar1.center);
         float avg_length = (bar1.length + bar2.length) / 2.0f;
-        
-        if (distance < avg_length * 0.2 || distance > avg_length * 2.5) {
-            confidence *= 0.3f; // 距离不合适时降低置信度
+        float distance_ratio = distance / avg_length;
+        if (distance_ratio < 0.1f || distance_ratio > 2.5f) {
+            confidence *= 0.3f;
         }
+        
+        float height_diff = std::abs(bar1.center.y - bar2.center.y);
+        float height_ratio = height_diff / avg_length;
+        if (height_ratio > 1.0f) { 
+            confidence *= 0.7f;
+        }
+        
+        float length_ratio = std::min(bar1.length, bar2.length) / std::max(bar1.length, bar2.length);
+        if (length_ratio < 0.5f) {
+            confidence *= 0.5f;
+        }
+
+        float parallel_confidence = calculateParallelConfidence(bar1, bar2);
+        confidence *= parallel_confidence;
         
         return confidence;
     }
 
-    float calculateNormalAngleDifference(const LightBar& bar1, const LightBar& bar2) const {
-        const Vector& n1 = bar1.normal_vector[0];
-        const Vector& n2 = bar2.normal_vector[0];
-        float cos = n1.roll * n2.roll + n1.pitch * n2.pitch + n1.yaw * n2.yaw;
-        if (cos < 0) {
-            cos = -cos;
-        }
-        return cos;
+    float calculateAngleDifference(const LightBar& bar1, const LightBar& bar2) const {
+        float raw_diff = std::abs(bar1.angle - bar2.angle);
+        float diff = std::min(raw_diff, static_cast<float>(CV_PI - raw_diff));
+        
+        return diff;
+    }
+
+    float calculateParallelConfidence(const LightBar& bar1, const LightBar& bar2) const {
+        cv::Point2f dir1 = bar1.bottom - bar1.top;
+        cv::Point2f dir2 = bar2.bottom - bar2.top;
+        
+        double norm1 = cv::norm(dir1);
+        double norm2 = cv::norm(dir2);
+        
+        if (norm1 < 1e-6 || norm2 < 1e-6) return 0.5f;
+        
+        dir1 /= norm1;
+        dir2 /= norm2;
+        
+        float dot = dir1.x * dir2.x + dir1.y * dir2.y;
+        dot = std::max(-1.0f, std::min(1.0f, dot));
+        
+        return std::abs(dot);
     }
 
     Armor createArmorFromPair(const LightBar& bar1, const LightBar& bar2, float confidence) {
@@ -383,42 +408,55 @@ private:
         std::vector<cv::Point2f> points = armor.corners;
         armor.rect = cv::minAreaRect(points);
         
-        armor.calculateFaceNormal();
+        armor.width = cv::norm(right->center - left->center);
+        armor.height = (left->length + right->length) / 2.0f;
         
         return armor;
     }
     
     void drawArmorPair(cv::Mat& image, const Armor& armor, const LightBar& left_bar, const LightBar& right_bar) {
-        
         cv::Scalar armor_color = (armor.color == "red") ? cv::Scalar(0, 0, 255) : cv::Scalar(255, 0, 0);
-        cv::line(image, left_bar.top, right_bar.top, armor_color, 3);
-        cv::line(image, right_bar.top, right_bar.bottom, armor_color, 3);
-        cv::line(image, right_bar.bottom, left_bar.bottom, armor_color, 3);
-        cv::line(image, left_bar.bottom, left_bar.top, armor_color, 3);
+        
+        cv::line(image, left_bar.top_mid, right_bar.top_mid, armor_color, 3);
+        cv::line(image, right_bar.top_mid, right_bar.bottom_mid, armor_color, 3);
+        cv::line(image, right_bar.bottom_mid, left_bar.bottom_mid, armor_color, 3);
+        cv::line(image, left_bar.bottom_mid, left_bar.top_mid, armor_color, 3);
+        
         cv::circle(image, armor.center, 5, cv::Scalar(0, 255, 0), -1);
-        // 绘制灯条法线
-        drawNormalVector(image, left_bar, cv::Scalar(255, 200, 100));
-        drawNormalVector(image, right_bar, cv::Scalar(100, 200, 255));
         
         std::string conf_text = "Conf: " + std::to_string(armor.pairing_confidence).substr(0, 4);
         cv::putText(image, conf_text, armor.center + cv::Point2f(10, -10),
                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
     }
-    
-    void drawNormalVector(cv::Mat& image, const LightBar& bar, const cv::Scalar& color) {
-        if (bar.normal_vector.empty()) return;
+
+    void drawLightBarInfo(cv::Mat& image, const LightBar& light_bar) {
+        cv::circle(image, light_bar.center, 3, cv::Scalar(255, 255, 0), -1);
         
-        const Vector& normal = bar.normal_vector[0];
-        float normal_length = bar.length * 0.6f;
+        std::string angle_text = std::to_string(light_bar.angle * 180 / CV_PI).substr(0, 4) + "°";
+        cv::putText(image, angle_text, light_bar.center + cv::Point2f(5, 5),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 0), 1);
         
-        cv::Point2f normal_2d(normal.roll, normal.pitch);
-        float norm = cv::norm(normal_2d);
-        if (norm > 0) {
-            normal_2d /= norm;
-        }
+        cv::Point2f direction(50 * std::sin(light_bar.angle), 50 * std::cos(light_bar.angle));
+        cv::arrowedLine(image, light_bar.center, light_bar.center + direction, 
+                       cv::Scalar(255, 255, 0), 1, cv::LINE_AA, 0, 0.3);
+    }
+
+    void drawArmorNormal(cv::Mat& image, const Armor& armor) {
+        if (armor.normal_vector.empty()) return;
         
-        cv::Point2f normal_end = bar.center + normal_2d * normal_length;
-        cv::arrowedLine(image, bar.center, normal_end, color, 2, cv::LINE_AA, 0, 0.2);
+        const Vector& normal = armor.normal_vector[0];
+        float normal_length = 40.0f;
+        
+        cv::Point2f normal_2d(normal.roll * normal_length, normal.pitch * normal_length);
+        cv::Point2f normal_end = armor.center + normal_2d;
+        
+        cv::arrowedLine(image, armor.center, normal_end, cv::Scalar(0, 255, 255), 2, cv::LINE_AA, 0, 0.3);
+        
+        std::string normal_text = "N:(" + std::to_string(normal.roll).substr(0, 4) + "," +
+                                 std::to_string(normal.pitch).substr(0, 4) + "," +
+                                 std::to_string(normal.yaw).substr(0, 4) + ")";
+        cv::putText(image, normal_text, armor.center + cv::Point2f(10, 20),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
     }
 
     void calculateAndDisplayEulerAngles(const Armor& armor, cv::Mat& image) {
@@ -480,9 +518,8 @@ private:
         
         return {x, y, z};
     }
-
-
 };
+    
 } // namespace rmcs_core::armordetector
 
 #endif // ARMOR_DETECTOR_H
