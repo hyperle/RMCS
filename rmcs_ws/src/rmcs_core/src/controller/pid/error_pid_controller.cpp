@@ -19,7 +19,8 @@ public:
         , measurement_(*this, "measurement")
         , feedforward_(*this, "feedforward", 0.0)
         , pid_calculator_(
-              get_parameter("kp").as_double(), get_parameter("ki").as_double(),
+              get_parameter("kp").as_double(), 
+              get_parameter("ki").as_double(),
               get_parameter("kd").as_double()) {
 
         register_output(get_parameter("control").as_string(), control_);

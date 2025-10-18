@@ -125,4 +125,7 @@
   <class type="rmcs_core::armor_detector::GetCameraFrame" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
+  <class type="rmcs_core::hardware::GantryController" base_class_type="rmcs_executor::Component">
+    <description>Test plugin.</description>
+  </class>
 </library>

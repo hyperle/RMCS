@@ -255,7 +255,7 @@ private:
     std::string detectColor(const cv::Mat& hsv, const cv::Point2f& point,
                             const cv::Mat& red_mask, const cv::Mat& blue_mask,
                             const std::string& enemy_color) {
-        int roi_size = 10;
+        float roi_size = 10;
         cv::Rect roi(point.x - roi_size/2, point.y - roi_size/2, roi_size, roi_size);
         roi &= cv::Rect(0, 0, hsv.cols, hsv.rows);
         
