@@ -61,13 +61,14 @@ gantry_information:
 Value_Broadcaster:
   ros__parameters:
     forward_list:
-      - /gantry/left_motor/angle
-      - /gantry/right_motor/angle
-      - /gantry/left_motor/velocity
-      - /gantry/right_motor/velocity
-      - /gantry/left_motor/filtered_velocity
-      - /gantry/right_motor/filtered_velocity
-      - /gantry/left_motor/torque
-      - /gantry/right_motor/torque
-      - /gantry/left_motor/control_torque
       - /gantry/control_angle
+      - /gantry/left/angle
+      - /gantry/left/velocity 
+      - /gantry/right/angle 
+      - /gantry/right/velocity
+      - /gantry/left/filtered_velocity
+      - /gantry/right/filtered_velocity
+      - /gantry/left/control_torque
+      - /gantry/right/control_torque
+      
+      

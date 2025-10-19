@@ -119,16 +119,16 @@
   <class type="rmcs_core::simulator::MotorControlBridge" base_class_type="rmcs_executor::Component">
     <description> run Component</description>
   </class>
-  <class type="rmcs_core::armordetector::ArmorPredictor" base_class_type="rmcs_executor::Component">
+  <class type="rmcs_core::armor_detector::ArmorPredictor" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::armor_detector::GetCameraFrame" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
-  <class type="rmcs_core::hardware::GantryController" base_class_type="rmcs_executor::Component">
+  <class type="rmcs_core::hardware::Gantry" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
-  <class type="rrmcs_core::controller::GantryController" base_class_type="rmcs_executor::Component">
+  <class type="rmcs_core::controller::GantryController" base_class_type="rmcs_executor::Component">
     <description>Test plugin.</description>
   </class>
   <class type="rmcs_core::controller::GantryInformation" base_class_type="rmcs_executor::Component">

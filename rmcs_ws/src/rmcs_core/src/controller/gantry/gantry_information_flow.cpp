@@ -43,6 +43,7 @@ public:
         register_input("/gantry/right/angle",    right_motor_angle_);
         register_input("/gantry/right/velocity", right_motor_velocity_);
         register_input("/gantry/control_angle",  gantry_control_angle_);
+        //register_input("/gantry/left_motor/max_torque", motor_max_control_torque_);
         register_output("/gantry/left/filtered_velocity",  left_motor_filtered_velocity_);
         register_output("/gantry/right/filtered_velocity", right_motor_filtered_velocity_);
         register_output("/gantry/left/control_torque",     left_motor_control_torque_);
@@ -117,6 +118,7 @@ private:
     InputInterface<double> gantry_control_angle_;
     InputInterface<double> left_motor_angle_, left_motor_velocity_;
     InputInterface<double> right_motor_angle_,right_motor_velocity_;
+    InputInterface<double> motor_max_control_torque_;
     OutputInterface<double> left_motor_filtered_velocity_;
     OutputInterface<double> right_motor_filtered_velocity_;
     OutputInterface<double> left_motor_control_torque_;

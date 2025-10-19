@@ -30,10 +30,9 @@ public:
         register_input("/remote/joystick/left",    joystick_left_);
         register_input("/remote/switch/right",     switch_right_);
         register_input("/remote/switch/left",      switch_left_);
-        register_input("/gantry/left_motor/angle", left_motor_angle_);
-        register_input("/gantry/left_motor/max_torque",      motor_max_control_torque_);
-        register_input("/gantry/left_motor/control_torque",  left_motor_control_torque_, nan);
-        register_input("/gantry/right_motor/control_torque", right_motor_control_torque_, nan);
+        register_input("/gantry/left/angle", left_motor_angle_);
+        register_input("/gantry/left/control_torque",  left_motor_control_torque_, nan);
+        register_input("/gantry/right/control_torque", right_motor_control_torque_, nan);
         register_output("/gantry/control_angle",             gantry_control_angle_);
     }
 
@@ -46,9 +45,6 @@ public:
         if (!switch_right_.ready()) {
             RCLCPP_WARN(
                 get_logger(), "Failed to fetch \"/switch_right\". Set to 0.0.");
-        }
-        if (motor_max_control_torque_.ready()) {
-            RCLCPP_INFO(get_logger(), "Max control torque: %.0f", *motor_max_control_torque_);
         }
     }
 
@@ -233,7 +229,6 @@ private:
         InputInterface<rmcs_msgs::Switch> switch_right_;
         InputInterface<rmcs_msgs::Switch> switch_left_;
         InputInterface<double> left_motor_angle_;
-        InputInterface<double> motor_max_control_torque_;
         InputInterface<double> left_motor_control_torque_;
         InputInterface<double> right_motor_control_torque_;
         OutputInterface<double> gantry_control_angle_;

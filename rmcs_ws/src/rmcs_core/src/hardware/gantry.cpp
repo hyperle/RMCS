@@ -52,11 +52,11 @@ private:
             , logger_(std::move(logger))
             , dr16_(gantry)
             , gantry_motors_(
-                  {gantry, gantry_command, "/gantry/left_motor",
+                  {gantry, gantry_command, "/gantry/left",
                    device::DjiMotor::Config{device::DjiMotor::Type::M2006}
                        .enable_multi_turn_angle()
                        .set_reversed()},
-                  {gantry, gantry_command, "/gantry/right_motor",
+                  {gantry, gantry_command, "/gantry/right",
                    device::DjiMotor::Config{device::DjiMotor::Type::M2006}
                        .enable_multi_turn_angle()
                        .set_reversed()})
