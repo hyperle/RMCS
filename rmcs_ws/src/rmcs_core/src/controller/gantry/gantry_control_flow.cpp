@@ -7,14 +7,18 @@
 #include <rmcs_msgs/chassis_mode.hpp>
 #include <rmcs_msgs/switch.hpp>
 
-
-
-namespace rmcs_core::controller{
+namespace rmcs_core::controller {
 
 enum class SwitchMode : uint8_t {
-        LOCKED       =0,
-        UNLOCKED     =1,
-    };
+    LOCKED       =0,
+    UNLOCKED     =1,
+};
+
+enum class ControlMode : uint8_t {
+    LOCKED         = 0,
+    UNLOCKED       = 1,
+    EMERGENCY_STOP = 2
+};
 
 class GantryController
     : public rmcs_executor::Component
@@ -31,23 +35,39 @@ public:
         register_input("/remote/switch/right",     switch_right_);
         register_input("/remote/switch/left",      switch_left_);
         register_input("/gantry/left/angle", left_motor_angle_);
-        register_input("/gantry/left/control_torque",  left_motor_control_torque_, nan);
-        register_input("/gantry/right/control_torque", right_motor_control_torque_, nan);
-        register_output("/gantry/control_angle",             gantry_control_angle_);
+        register_output("/gantry/control/angle",             gantry_control_angle_);
+        register_output("/gantry/control/mode",              gantry_control_mode_);
+        register_output("/gantry/control/safe_operation",    safe_operation_);
     }
 
+    void update() override {
+        using namespace rmcs_msgs;
 
-    void before_updating() override {
-        if (!switch_left_.ready()) {
-            RCLCPP_WARN(
-                get_logger(), "Failed to fetch \"/switch_left\". Set to 0.0.");
+        auto switch_right = *switch_right_;
+        auto switch_left  = *switch_left_;
+
+        // 安全检查
+        bool is_safe = is_safe_operation(switch_left, switch_right);
+        *safe_operation_ = is_safe;
+
+        if (!is_safe) {
+            // 紧急停止模式
+            *gantry_control_mode_ = static_cast<uint8_t>(ControlMode::EMERGENCY_STOP);
+            *gantry_control_angle_ = 0.0; // 或者保持当前位置，根据安全策略
+            return;
         }
-        if (!switch_right_.ready()) {
-            RCLCPP_WARN(
-                get_logger(), "Failed to fetch \"/switch_right\". Set to 0.0.");
-        }
+
+        // 模式切换
+        update_operation_mode(switch_left, switch_right);
+
+        // 生成控制指令
+        generate_control_commands();
+
+        last_switch_right_ = switch_right;
+        last_switch_left_ = switch_left;
     }
 
+private:
     bool is_safe_operation(rmcs_msgs::Switch switch_left, rmcs_msgs::Switch switch_right) const {
         using namespace rmcs_msgs;
         if (switch_left == Switch::UNKNOWN || switch_right == Switch::UNKNOWN) {
@@ -63,6 +83,7 @@ public:
         }
         return true;
     }
+
     void update_operation_mode(rmcs_msgs::Switch switch_left, rmcs_msgs::Switch switch_right) {
         // 只有左拨杆不为DOWN时才允许模式切换
         if (switch_left != rmcs_msgs::Switch::DOWN) {
@@ -101,6 +122,9 @@ public:
         }
         // 限制控制角度范围（安全保护）
         limit_control_angle();
+
+        // 设置输出控制模式
+        *gantry_control_mode_ = static_cast<uint8_t>(mode_);
     }
 
     void handle_locked_mode() {
@@ -135,10 +159,6 @@ public:
         *gantry_control_angle_ = std::clamp(*gantry_control_angle_, -max_angle, max_angle);
     }
 
-    void reset_control_commands() {
-        *gantry_control_angle_ = nan;
-    }
-
     static double joystick_input_to_angle(double joystick_value) {
         constexpr double control_hz = 1000.0; // 控制频率
         constexpr double scale_factor = 2.0 * std::numbers::pi / control_hz;
@@ -153,89 +173,22 @@ public:
         }
     }
 
-    void update() override {
-        using namespace rmcs_msgs;
-
-        auto switch_right = *switch_right_;
-        auto switch_left  = *switch_left_;
-        do{
-            if ((switch_left == Switch::UNKNOWN || switch_right == Switch::UNKNOWN)
-                || (switch_left == Switch::DOWN && switch_right == Switch::DOWN)) {
-                reset_all_controls();
-                break;
-            }                                
-        auto mode = mode_;
-        if (switch_left != Switch::DOWN) {//左拨杆不为down才允许切换模式
-            if (last_switch_right_ == Switch::DOWN && switch_right == Switch::MIDDLE) {
-                if (mode ==rmcs_core::controller::SwitchMode::LOCKED ) {
-                    mode = rmcs_core::controller::SwitchMode::UNLOCKED;
-                } 
-            } else if (last_switch_right_==Switch::MIDDLE && switch_right== Switch::DOWN) {
-                if (mode ==rmcs_core::controller::SwitchMode::UNLOCKED) {
-                    mode =rmcs_core::controller::SwitchMode::LOCKED;
-                }
-            }
-            }
-            mode_ = mode;
-            // mode模式切换，采用上升下降沿切换判断方法
-
-        RCLCPP_INFO(this->get_logger(), "SwitchMode = %s", to_string(mode_).c_str());
-        update_place_control();
-
-        }while(false);
-
-        last_switch_right_= switch_right;
-        last_switch_left_ = switch_left;                            
-    }
-
-        void reset_all_controls() {
-            *gantry_control_angle_ = nan;
-        }
-
-        void update_place_control(){
-            //*gantry_control_angle_ =0.0;
-            using namespace rmcs_msgs;
-
-            switch(mode_){
-            case SwitchMode::LOCKED: {
-                if(*switch_left_ == Switch::DOWN){
-                    *gantry_control_angle_ = *left_motor_angle_;
-                }
-                else if(*switch_left_ != Switch::DOWN){
-                    *gantry_control_angle_=0;
-                }
-            } break;
-            case SwitchMode::UNLOCKED: {
-                double increment =(*joystick_left_).x();
-                RCLCPP_INFO(this->get_logger(), "increment = %f", increment);
-                *gantry_control_angle_ += place_translate_to_angle(increment);
-            } break;
-            }
-        }
-        
-        static double place_translate_to_angle(double place){
-            double angle;
-            angle = place*(2*std::numbers::pi/500);
-            //control_hz=500,取决于更新频率1000hz
-            return angle;
-        }
-
 private:
-        static constexpr double inf = std::numeric_limits<double>::infinity();
-        static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
-        rclcpp::Logger logger_;
-        InputInterface<Eigen::Vector2d> joystick_right_;
-        InputInterface<Eigen::Vector2d> joystick_left_;
-        InputInterface<rmcs_msgs::Switch> switch_right_;
-        InputInterface<rmcs_msgs::Switch> switch_left_;
-        InputInterface<double> left_motor_angle_;
-        InputInterface<double> left_motor_control_torque_;
-        InputInterface<double> right_motor_control_torque_;
-        OutputInterface<double> gantry_control_angle_;
+    static constexpr double inf = std::numeric_limits<double>::infinity();
+    static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+    rclcpp::Logger logger_;
+    InputInterface<Eigen::Vector2d> joystick_right_;
+    InputInterface<Eigen::Vector2d> joystick_left_;
+    InputInterface<rmcs_msgs::Switch> switch_right_;
+    InputInterface<rmcs_msgs::Switch> switch_left_;
+    InputInterface<double> left_motor_angle_;
+    OutputInterface<double> gantry_control_angle_;
+    OutputInterface<uint8_t> gantry_control_mode_;
+    OutputInterface<bool> safe_operation_;
 
-        rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
-        rmcs_msgs::Switch last_switch_left_  = rmcs_msgs::Switch::UNKNOWN;
-        rmcs_core::controller::SwitchMode  mode_ = rmcs_core::controller::SwitchMode::LOCKED;     
+    rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
+    rmcs_msgs::Switch last_switch_left_  = rmcs_msgs::Switch::UNKNOWN;
+    SwitchMode  mode_ = SwitchMode::LOCKED;     
 };
 }
 

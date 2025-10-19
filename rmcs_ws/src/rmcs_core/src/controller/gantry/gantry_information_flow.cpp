@@ -9,9 +9,13 @@
 #include "filter/low_pass_filter.hpp"
 #include "controller/pid/pid_calculator.hpp" 
 
+namespace rmcs_core::controller {
 
-
-namespace rmcs_core::controller{
+enum class ControlMode : uint8_t {
+    LOCKED         = 0,
+    UNLOCKED       = 1,
+    EMERGENCY_STOP = 2
+};
 
 class GantryInformation
     : public rmcs_executor::Component
@@ -42,8 +46,9 @@ public:
         register_input("/gantry/left/velocity",  left_motor_velocity_);
         register_input("/gantry/right/angle",    right_motor_angle_);
         register_input("/gantry/right/velocity", right_motor_velocity_);
-        register_input("/gantry/control_angle",  gantry_control_angle_);
-        //register_input("/gantry/left_motor/max_torque", motor_max_control_torque_);
+        register_input("/gantry/control/angle",  gantry_control_angle_);
+        register_input("/gantry/control/mode",   gantry_control_mode_);
+        register_input("/gantry/control/safe_operation", safe_operation_);
         register_output("/gantry/left/filtered_velocity",  left_motor_filtered_velocity_);
         register_output("/gantry/right/filtered_velocity", right_motor_filtered_velocity_);
         register_output("/gantry/left/control_torque",     left_motor_control_torque_);
@@ -51,23 +56,24 @@ public:
     }
 
     void update() override {
-        if (!is_control_valid()) {
+        if (!*safe_operation_) {
+            reset_all_controls();
+            return;
+        }
+
+        auto mode = static_cast<ControlMode>(*gantry_control_mode_);
+        if (mode == ControlMode::EMERGENCY_STOP) {
             reset_all_controls();
             return;
         }
 
         process_sensor_data();
         compute_control_outputs();
-
     }
 
     void reset_all_controls() {
         *left_motor_control_torque_ = 0.0;
         *right_motor_control_torque_ = 0.0;
-    }
-
-    bool is_control_valid() const {
-        return !std::isnan(*gantry_control_angle_);
     }
 
     void process_sensor_data() {
@@ -76,6 +82,11 @@ public:
     }
 
     void compute_control_outputs() {
+        if (std::isnan(*gantry_control_angle_)) {
+            reset_all_controls();
+            return;
+        }
+
         Eigen::Vector2d current_angles = {*left_motor_angle_, *right_motor_angle_};
         Eigen::Vector2d filtered_velocities = {*left_motor_filtered_velocity_, *right_motor_filtered_velocity_};
         
@@ -116,6 +127,8 @@ private:
     pid::PidCalculator left_motor_velocity_pid_, left_motor_torques_pid_;
     pid::PidCalculator right_motor_velocity_pid_,right_motor_torques_pid_;
     InputInterface<double> gantry_control_angle_;
+    InputInterface<uint8_t> gantry_control_mode_;
+    InputInterface<bool> safe_operation_;
     InputInterface<double> left_motor_angle_, left_motor_velocity_;
     InputInterface<double> right_motor_angle_,right_motor_velocity_;
     InputInterface<double> motor_max_control_torque_;
