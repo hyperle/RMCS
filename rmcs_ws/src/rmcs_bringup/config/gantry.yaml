@@ -4,7 +4,7 @@ rmcs_executor:
      components:
       - "rmcs_core::hardware::Gantry -> gantry_hardware"
       - "rmcs_core::controller::GantryController -> gantry_controller"
-      - "rmcs_core::controller::GantryStateController -> gantry_state_controller"
+      - "rmcs_core::controller::GantryInformation -> gantry_information"
       - "rmcs_core::broadcaster::ValueBroadcaster -> Value_Broadcaster"
 
 gantry_hardware:
@@ -15,26 +15,47 @@ gantry_controller:
   ros__parameters: {}
 
 
-gantry_state_controller:
+gantry_information:
   ros__parameters:
-    kp1: 2.014
-    ki1: 0.016341675
-    kd1: 0.012
-    kp2: 0.8
-    ki2: 0.005
-    kd2: 0.012
-    integral_min1: -1000.0
-    integral_max1:  1000.0
-    integral_split_min1: -120.0
-    integral_split_max1:  120.0
-    output_min1: -100.0
-    output_max1: 100.0
-    integral_min2: -1000.0
-    integral_max2: 1000.0
-    integral_split_min2: -100.0
-    integral_split_max2: 100.0 
-    output_min2: -100.0
-    output_max2:  100.0
+    left_motor_angle_to_velocity_kp: 10.0
+    left_motor_angle_to_velocity_ki: 0.0
+    left_motor_angle_to_velocity_kd: 0.0
+    left_motor_angle_to_velocity_integral_min: -1000.0
+    left_motor_angle_to_velocity_integral_max: 1000.0
+    left_motor_angle_to_velocity_integral_split_min: -1000.0
+    left_motor_angle_to_velocity_integral_split_max: 1000.0
+    left_motor_angle_to_velocity_output_min: -1000.0
+    left_motor_angle_to_velocity_output_max: 1000.0
+
+    right_motor_angle_to_velocity_kp: 10.0
+    right_motor_angle_to_velocity_ki: 0.0
+    right_motor_angle_to_velocity_kd: 0.0
+    right_motor_angle_to_velocity_integral_min: -1000.0
+    right_motor_angle_to_velocity_integral_max: 1000.0
+    right_motor_angle_to_velocity_integral_split_min: -1000.0
+    right_motor_angle_to_velocity_integral_split_max: 1000.0
+    right_motor_angle_to_velocity_output_min: -1000.0
+    right_motor_angle_to_velocity_output_max: 1000.0
+
+    left_motor_velocity_to_torques_kp: 10.0
+    left_motor_velocity_to_torques_ki: 0.0
+    left_motor_velocity_to_torques_kd: 0.0
+    left_motor_velocity_to_torques_integral_min: -1000.0
+    left_motor_velocity_to_torques_integral_max: 1000.0
+    left_motor_velocity_to_torques_integral_split_min: -1000.0
+    left_motor_velocity_to_torques_integral_split_max: 1000.0
+    left_motor_velocity_to_torques_output_min: -1000.0
+    left_motor_velocity_to_torques_output_max: 1000.0
+
+    right_motor_velocity_to_torques_kp: 10.0
+    right_motor_velocity_to_torques_ki: 0.0
+    right_motor_velocity_to_torques_kd: 0.0
+    right_motor_velocity_to_torques_integral_min: -1000.0
+    right_motor_velocity_to_torques_integral_max: 1000.0
+    right_motor_velocity_to_torques_integral_split_min: -1000.0
+    right_motor_velocity_to_torques_integral_split_max: 1000.0
+    right_motor_velocity_to_torques_output_min: -1000.0
+    right_motor_velocity_to_torques_output_max: 1000.0
 
 
 Value_Broadcaster:
@@ -50,4 +71,3 @@ Value_Broadcaster:
       - /gantry/right_motor/torque
       - /gantry/left_motor/control_torque
       - /gantry/control_angle
-      - /gantry/left_motor/filtered_velocity

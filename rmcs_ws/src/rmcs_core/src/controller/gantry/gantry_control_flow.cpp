@@ -32,6 +32,8 @@ public:
         register_input("/remote/switch/left",      switch_left_);
         register_input("/gantry/left_motor/angle", left_motor_angle_);
         register_input("/gantry/left_motor/max_torque",      motor_max_control_torque_);
+        register_input("/gantry/left_motor/control_torque",  left_motor_control_torque_, nan);
+        register_input("/gantry/right_motor/control_torque", right_motor_control_torque_, nan);
         register_output("/gantry/control_angle",             gantry_control_angle_);
     }
 
@@ -45,8 +47,114 @@ public:
             RCLCPP_WARN(
                 get_logger(), "Failed to fetch \"/switch_right\". Set to 0.0.");
         }
-        RCLCPP_INFO(
-            get_logger(), "Max control torque of gantry motor: %.f", *motor_max_control_torque_);
+        if (motor_max_control_torque_.ready()) {
+            RCLCPP_INFO(get_logger(), "Max control torque: %.0f", *motor_max_control_torque_);
+        }
+    }
+
+    bool is_safe_operation(rmcs_msgs::Switch switch_left, rmcs_msgs::Switch switch_right) const {
+        using namespace rmcs_msgs;
+        if (switch_left == Switch::UNKNOWN || switch_right == Switch::UNKNOWN) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, 
+                               "Safety: Switch in unknown state");
+            return false;
+        }
+        // 双拨杆下推为紧急停止
+        if (switch_left == Switch::DOWN && switch_right == Switch::DOWN) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                               "Safety: Emergency stop activated");
+            return false;
+        }
+        return true;
+    }
+    void update_operation_mode(rmcs_msgs::Switch switch_left, rmcs_msgs::Switch switch_right) {
+        // 只有左拨杆不为DOWN时才允许模式切换
+        if (switch_left != rmcs_msgs::Switch::DOWN) {
+            handle_mode_transition(switch_right);
+        }
+        
+        RCLCPP_DEBUG(get_logger(), "Current mode: %s", to_string(mode_).c_str());
+    }
+
+    void handle_mode_transition(rmcs_msgs::Switch switch_right) {
+        using namespace rmcs_msgs;
+        // 右拨杆从DOWN到MIDDLE：切换到UNLOCKED模式
+        if (last_switch_right_ == Switch::DOWN && switch_right == Switch::MIDDLE) {
+            if (mode_ == SwitchMode::LOCKED) {
+                mode_ = SwitchMode::UNLOCKED;
+                RCLCPP_INFO(get_logger(), "Mode transition: LOCKED -> UNLOCKED");
+            }
+        }
+        // 右拨杆从MIDDLE到DOWN：切换到LOCKED模式
+        else if (last_switch_right_ == Switch::MIDDLE && switch_right == Switch::DOWN) {
+            if (mode_ == SwitchMode::UNLOCKED) {
+                mode_ = SwitchMode::LOCKED;
+                RCLCPP_INFO(get_logger(), "Mode transition: UNLOCKED -> LOCKED");
+            }
+        }
+    }
+
+    void generate_control_commands() {
+        switch(mode_) {
+            case SwitchMode::LOCKED:
+                handle_locked_mode();
+                break;
+            case SwitchMode::UNLOCKED:
+                handle_unlocked_mode();
+                break;
+        }
+        // 限制控制角度范围（安全保护）
+        limit_control_angle();
+    }
+
+    void handle_locked_mode() {
+        using namespace rmcs_msgs;
+        if (*switch_left_ == Switch::DOWN) {
+            // 锁定模式：保持当前位置
+            *gantry_control_angle_ = *left_motor_angle_;
+        } else {
+            // 非激活状态：归零
+            *gantry_control_angle_ = 0.0;
+        }
+    }
+
+    void handle_unlocked_mode() {
+        if (!joystick_left_.ready()) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                               "Joystick not ready in UNLOCKED mode");
+            return;
+        }
+        
+        // 解锁模式：根据摇杆输入调整控制角度
+        double joystick_input = (*joystick_left_).x();
+        double angle_increment = joystick_input_to_angle(joystick_input);
+        *gantry_control_angle_ += angle_increment;
+        
+        RCLCPP_DEBUG(get_logger(), "Joystick input: %.3f -> Angle increment: %.3f", 
+                    joystick_input, angle_increment);
+    }
+
+    void limit_control_angle() {
+        constexpr double max_angle = M_PI; // 可根据实际机械限制调整
+        *gantry_control_angle_ = std::clamp(*gantry_control_angle_, -max_angle, max_angle);
+    }
+
+    void reset_control_commands() {
+        *gantry_control_angle_ = nan;
+    }
+
+    static double joystick_input_to_angle(double joystick_value) {
+        constexpr double control_hz = 1000.0; // 控制频率
+        constexpr double scale_factor = 2.0 * std::numbers::pi / control_hz;
+        return joystick_value * scale_factor;
+    }
+
+    static std::string to_string(SwitchMode mode) {
+        switch (mode) {
+            case SwitchMode::LOCKED:   return "LOCKED";
+            case SwitchMode::UNLOCKED: return "UNLOCKED";
+            default:                   return "UNKNOWN";
+        }
     }
 
     void update() override {
@@ -58,7 +166,6 @@ public:
             if ((switch_left == Switch::UNKNOWN || switch_right == Switch::UNKNOWN)
                 || (switch_left == Switch::DOWN && switch_right == Switch::DOWN)) {
                 reset_all_controls();
-                // 安全设置（锁定）
                 break;
             }                                
         auto mode = mode_;
@@ -109,16 +216,7 @@ public:
             } break;
             }
         }
-
-
-
-        static std::string to_string(rmcs_core::controller::SwitchMode mode) {
-            switch (mode) {
-            case rmcs_core::controller::SwitchMode::LOCKED:       return "LOCKED";
-            case rmcs_core::controller::SwitchMode::UNLOCKED:     return "UNLOCKED";
-            default:                                              return "UNKNOWN";
-        }
-        }
+        
         static double place_translate_to_angle(double place){
             double angle;
             angle = place*(2*std::numbers::pi/500);
