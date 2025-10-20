@@ -11,12 +11,6 @@
 
 namespace rmcs_core::controller {
 
-enum class ControlMode : uint8_t {
-    LOCKED         = 0,
-    UNLOCKED       = 1,
-    EMERGENCY_STOP = 2
-};
-
 class GantryInformation
     : public rmcs_executor::Component
     , public rclcpp::Node {
@@ -42,13 +36,11 @@ public:
         set_pid_parameter(right_motor_velocity_pid_,"right_motor_angle_to_velocity");
         set_pid_parameter(left_motor_torques_pid_,  "left_motor_velocity_to_torques");
         set_pid_parameter(right_motor_torques_pid_, "right_motor_velocity_to_torques");
+        register_input("/gantry/control/angle",  gantry_control_angle_);
         register_input("/gantry/left/angle",     left_motor_angle_);
         register_input("/gantry/left/velocity",  left_motor_velocity_);
         register_input("/gantry/right/angle",    right_motor_angle_);
         register_input("/gantry/right/velocity", right_motor_velocity_);
-        register_input("/gantry/control/angle",  gantry_control_angle_);
-        register_input("/gantry/control/mode",   gantry_control_mode_);
-        register_input("/gantry/control/safe_operation", safe_operation_);
         register_output("/gantry/left/filtered_velocity",  left_motor_filtered_velocity_);
         register_output("/gantry/right/filtered_velocity", right_motor_filtered_velocity_);
         register_output("/gantry/left/control_torque",     left_motor_control_torque_);
@@ -56,47 +48,41 @@ public:
     }
 
     void update() override {
-        if (!*safe_operation_) {
+        if (std::isnan(*gantry_control_angle_)) {
             reset_all_controls();
             return;
         }
 
-        auto mode = static_cast<ControlMode>(*gantry_control_mode_);
-        if (mode == ControlMode::EMERGENCY_STOP) {
-            reset_all_controls();
-            return;
-        }
-
+        compute_pid_control();
+    }
+private:
+    void compute_pid_control() {
         process_sensor_data();
-        compute_control_outputs();
+        
+        Eigen::Vector2d current_angles = {*left_motor_angle_, *right_motor_angle_};
+        Eigen::Vector2d filtered_velocities = {*left_motor_filtered_velocity_, *right_motor_filtered_velocity_};
+        
+        double sync_error = calculate_sync_error(current_angles);
+        Eigen::Vector2d target_velocities = calculate_target_velocities(current_angles, *gantry_control_angle_);
+        Eigen::Vector2d control_torques = calculate_control_torques(filtered_velocities, target_velocities, sync_error);
+
+        *left_motor_control_torque_ = control_torques.x();
+        *right_motor_control_torque_ = control_torques.y();
+        
+        RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), 1000,
+                            "Target: %.3f, Torques: [%.3f, %.3f]",
+                            *gantry_control_angle_,
+                            *left_motor_control_torque_, *right_motor_control_torque_);
     }
 
     void reset_all_controls() {
-        *left_motor_control_torque_ = 0.0;
+        *left_motor_control_torque_  = 0.0;
         *right_motor_control_torque_ = 0.0;
     }
 
     void process_sensor_data() {
         *left_motor_filtered_velocity_  = velocity_filter_.update(*left_motor_velocity_);
         *right_motor_filtered_velocity_ = velocity_filter_.update(*right_motor_velocity_);
-    }
-
-    void compute_control_outputs() {
-        if (std::isnan(*gantry_control_angle_)) {
-            reset_all_controls();
-            return;
-        }
-
-        Eigen::Vector2d current_angles = {*left_motor_angle_, *right_motor_angle_};
-        Eigen::Vector2d filtered_velocities = {*left_motor_filtered_velocity_, *right_motor_filtered_velocity_};
-        
-        double sync_error = calculate_sync_error(current_angles);
-        
-        Eigen::Vector2d target_velocities = calculate_target_velocities(current_angles, *gantry_control_angle_);
-        Eigen::Vector2d control_torques = calculate_control_torques(filtered_velocities, target_velocities, sync_error);
-
-        *left_motor_control_torque_ = control_torques.x();
-        *right_motor_control_torque_ = control_torques.y();
     }
 
     static double calculate_sync_error(const Eigen::Vector2d& angles)  {
@@ -111,8 +97,8 @@ public:
     }
 
     Eigen::Vector2d calculate_control_torques(const Eigen::Vector2d& current_velocities, 
-                                             const Eigen::Vector2d& target_velocities, 
-                                             double sync_error) {
+                                              const Eigen::Vector2d& target_velocities, 
+                                              double sync_error) {
         Eigen::Vector2d control_torques;
         control_torques.x() = left_motor_torques_pid_.update(
             target_velocities.x() - current_velocities.x() - sync_error);
@@ -126,12 +112,11 @@ private:
     filter::LowPassFilter<1> velocity_filter_;
     pid::PidCalculator left_motor_velocity_pid_, left_motor_torques_pid_;
     pid::PidCalculator right_motor_velocity_pid_,right_motor_torques_pid_;
+
     InputInterface<double> gantry_control_angle_;
-    InputInterface<uint8_t> gantry_control_mode_;
-    InputInterface<bool> safe_operation_;
     InputInterface<double> left_motor_angle_, left_motor_velocity_;
     InputInterface<double> right_motor_angle_,right_motor_velocity_;
-    InputInterface<double> motor_max_control_torque_;
+
     OutputInterface<double> left_motor_filtered_velocity_;
     OutputInterface<double> right_motor_filtered_velocity_;
     OutputInterface<double> left_motor_control_torque_;
