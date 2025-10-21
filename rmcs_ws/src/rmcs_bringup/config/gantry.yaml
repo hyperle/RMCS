@@ -17,45 +17,49 @@ gantry_controller:
 
 gantry_information:
   ros__parameters:
-    left_motor_angle_to_velocity_kp: 10.0
+    left_motor_angle_to_velocity_kp: 12.0
     left_motor_angle_to_velocity_ki: 0.0
     left_motor_angle_to_velocity_kd: 0.0
     left_motor_angle_to_velocity_integral_min: -1000.0
     left_motor_angle_to_velocity_integral_max: 1000.0
-    left_motor_angle_to_velocity_integral_split_min: -1000.0
-    left_motor_angle_to_velocity_integral_split_max: 1000.0
-    left_motor_angle_to_velocity_output_min: -1000.0
-    left_motor_angle_to_velocity_output_max: 1000.0
+    left_motor_angle_to_velocity_integral_split_min: -120.0
+    left_motor_angle_to_velocity_integral_split_max: 120.0
+    left_motor_angle_to_velocity_output_min: -100.0
+    left_motor_angle_to_velocity_output_max: 100.0
 
-    right_motor_angle_to_velocity_kp: 10.0
+    right_motor_angle_to_velocity_kp: 12.0
     right_motor_angle_to_velocity_ki: 0.0
     right_motor_angle_to_velocity_kd: 0.0
     right_motor_angle_to_velocity_integral_min: -1000.0
     right_motor_angle_to_velocity_integral_max: 1000.0
-    right_motor_angle_to_velocity_integral_split_min: -1000.0
-    right_motor_angle_to_velocity_integral_split_max: 1000.0
-    right_motor_angle_to_velocity_output_min: -1000.0
-    right_motor_angle_to_velocity_output_max: 1000.0
+    right_motor_angle_to_velocity_integral_split_min: -120.0
+    right_motor_angle_to_velocity_integral_split_max: 120.0
+    right_motor_angle_to_velocity_output_min: -100.0
+    right_motor_angle_to_velocity_output_max: 100.0
 
-    left_motor_velocity_to_torques_kp: 10.0
+    left_motor_velocity_to_torques_kp: 18.0
     left_motor_velocity_to_torques_ki: 0.0
     left_motor_velocity_to_torques_kd: 0.0
     left_motor_velocity_to_torques_integral_min: -1000.0
     left_motor_velocity_to_torques_integral_max: 1000.0
-    left_motor_velocity_to_torques_integral_split_min: -1000.0
-    left_motor_velocity_to_torques_integral_split_max: 1000.0
-    left_motor_velocity_to_torques_output_min: -1000.0
-    left_motor_velocity_to_torques_output_max: 1000.0
+    left_motor_velocity_to_torques_integral_split_min: -100.0
+    left_motor_velocity_to_torques_integral_split_max: 100.0
+    left_motor_velocity_to_torques_output_min: -100.0
+    left_motor_velocity_to_torques_output_max: 100.0
 
-    right_motor_velocity_to_torques_kp: 10.0
+    right_motor_velocity_to_torques_kp: 18.0
     right_motor_velocity_to_torques_ki: 0.0
     right_motor_velocity_to_torques_kd: 0.0
     right_motor_velocity_to_torques_integral_min: -1000.0
     right_motor_velocity_to_torques_integral_max: 1000.0
-    right_motor_velocity_to_torques_integral_split_min: -1000.0
-    right_motor_velocity_to_torques_integral_split_max: 1000.0
-    right_motor_velocity_to_torques_output_min: -1000.0
-    right_motor_velocity_to_torques_output_max: 1000.0
+    right_motor_velocity_to_torques_integral_split_min: -100.0
+    right_motor_velocity_to_torques_integral_split_max: 100.0
+    right_motor_velocity_to_torques_output_min: -100.0
+    right_motor_velocity_to_torques_output_max: 100.0
+
+    torque_oscillation_threshold: 8.0    
+    deadzone_duration: 1.5              
+    oscillation_window: 15
 
 
 Value_Broadcaster:

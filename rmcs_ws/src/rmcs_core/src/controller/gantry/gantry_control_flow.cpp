@@ -11,7 +11,7 @@ namespace rmcs_core::controller {
 
 enum class SwitchMode : uint8_t {
     LOCKED       =0,
-    UNLOCKED     =1,
+    UNLOCKED     =1
 };
 
 class GantryController
@@ -28,7 +28,7 @@ public:
         register_input("/remote/switch/right",   switch_right_);
         register_input("/remote/switch/left",    switch_left_);
         register_input("/gantry/left/angle",     left_motor_angle_);
-        register_output("/gantry/control/angle",          gantry_control_angle_);
+        register_output("/gantry/control/angle", gantry_control_angle_);
     }
 
     void before_updating() override {
@@ -37,14 +37,13 @@ public:
                 RCLCPP_WARN(get_logger(), "Failed to fetch \"/switch_left\". Set to 0.0.");
             }
             if (!switch_right_.ready()) {
-                RCLCPP_WARN(
-                    get_logger(), "Failed to fetch \"/switch_right\". Set to 0.0.");
+                RCLCPP_WARN(get_logger(), "Failed to fetch \"/switch_right\". Set to 0.0.");
             }
         }
 
     void update() override {
         using namespace rmcs_msgs;
-
+        
         auto switch_right = *switch_right_;
         auto switch_left  = *switch_left_;
         
@@ -118,12 +117,14 @@ private:
 
     static constexpr double inf = std::numeric_limits<double>::infinity();
     static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+    double max_angle_difference;
     rclcpp::Logger logger_;
     InputInterface<Eigen::Vector2d> joystick_right_;
     InputInterface<Eigen::Vector2d> joystick_left_;
     InputInterface<rmcs_msgs::Switch> switch_right_;
     InputInterface<rmcs_msgs::Switch> switch_left_;
     InputInterface<double> left_motor_angle_;
+    InputInterface<double> right_motor_angle_;
     OutputInterface<double> gantry_control_angle_;
 
     rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
