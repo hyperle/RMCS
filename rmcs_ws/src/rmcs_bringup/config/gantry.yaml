@@ -1,7 +1,7 @@
 rmcs_executor:
   ros__parameters:
-     update_rate: 1000.0
-     components:
+    update_rate: 1000.0
+    components:
       - "rmcs_core::hardware::Gantry -> gantry_hardware"
       - "rmcs_core::controller::GantryController -> gantry_controller"
       - "rmcs_core::controller::GantryInformation -> gantry_information"
@@ -9,70 +9,85 @@ rmcs_executor:
 
 gantry_hardware:
   ros__parameters:
-      usb_pid_bottom_board: -1
+    usb_pid_bottom_board: -1
 
 gantry_controller:
   ros__parameters: {}
 
-
 gantry_information:
   ros__parameters:
-    left_motor_angle_to_velocity_kp: 12.0
-    left_motor_angle_to_velocity_ki: 0.0
-    left_motor_angle_to_velocity_kd: 0.0
+  # 位置环（位置→速度）
+    left_motor_angle_to_velocity_kp: 0.0
+    left_motor_angle_to_velocity_ki: 0.00
+    left_motor_angle_to_velocity_kd: 0.00
     left_motor_angle_to_velocity_integral_min: -1000.0
     left_motor_angle_to_velocity_integral_max: 1000.0
-    left_motor_angle_to_velocity_integral_split_min: -120.0
-    left_motor_angle_to_velocity_integral_split_max: 120.0
     left_motor_angle_to_velocity_output_min: -100.0
     left_motor_angle_to_velocity_output_max: 100.0
 
-    right_motor_angle_to_velocity_kp: 12.0
-    right_motor_angle_to_velocity_ki: 0.0
-    right_motor_angle_to_velocity_kd: 0.0
+    right_motor_angle_to_velocity_kp: 0.0
+    right_motor_angle_to_velocity_ki: 0.00
+    right_motor_angle_to_velocity_kd: 0.00
     right_motor_angle_to_velocity_integral_min: -1000.0
     right_motor_angle_to_velocity_integral_max: 1000.0
-    right_motor_angle_to_velocity_integral_split_min: -120.0
-    right_motor_angle_to_velocity_integral_split_max: 120.0
     right_motor_angle_to_velocity_output_min: -100.0
     right_motor_angle_to_velocity_output_max: 100.0
 
-    left_motor_velocity_to_torques_kp: 18.0
-    left_motor_velocity_to_torques_ki: 0.0
-    left_motor_velocity_to_torques_kd: 0.0
+    yaw_motor_angle_to_velocity_kp: 2.0
+    yaw_motor_angle_to_velocity_ki: 0.01
+    yaw_motor_angle_to_velocity_kd: 0.01
+    yaw_motor_angle_to_velocity_integral_min: -1000.0
+    yaw_motor_angle_to_velocity_integral_max: 1000.0
+    yaw_motor_angle_to_velocity_output_min: -100.0
+    yaw_motor_angle_to_velocity_output_max: 100.0
+
+    # 速度环（速度→扭矩）
+    left_motor_velocity_to_torques_kp: 2.5
+    left_motor_velocity_to_torques_ki: 0.016
+    left_motor_velocity_to_torques_kd: 0.02
     left_motor_velocity_to_torques_integral_min: -1000.0
     left_motor_velocity_to_torques_integral_max: 1000.0
-    left_motor_velocity_to_torques_integral_split_min: -100.0
-    left_motor_velocity_to_torques_integral_split_max: 100.0
     left_motor_velocity_to_torques_output_min: -100.0
     left_motor_velocity_to_torques_output_max: 100.0
 
-    right_motor_velocity_to_torques_kp: 18.0
-    right_motor_velocity_to_torques_ki: 0.0
-    right_motor_velocity_to_torques_kd: 0.0
+    right_motor_velocity_to_torques_kp: 2.5
+    right_motor_velocity_to_torques_ki: 0.016
+    right_motor_velocity_to_torques_kd: 0.02
     right_motor_velocity_to_torques_integral_min: -1000.0
     right_motor_velocity_to_torques_integral_max: 1000.0
-    right_motor_velocity_to_torques_integral_split_min: -100.0
-    right_motor_velocity_to_torques_integral_split_max: 100.0
     right_motor_velocity_to_torques_output_min: -100.0
     right_motor_velocity_to_torques_output_max: 100.0
 
-    torque_oscillation_threshold: 8.0    
-    deadzone_duration: 1.5              
-    oscillation_window: 15
+    yaw_motor_velocity_to_torques_kp: 0.8
+    yaw_motor_velocity_to_torques_ki: 0.01
+    yaw_motor_velocity_to_torques_kd: 0.01
+    yaw_motor_velocity_to_torques_integral_min: -1000.0
+    yaw_motor_velocity_to_torques_integral_max: 1000.0
+    yaw_motor_velocity_to_torques_output_min: -100.0
+    yaw_motor_velocity_to_torques_output_max: 100.0
 
+    dead_zone_duration: 15.0
+    gantry_oscillation_threshold: 0.03
+    yaw_oscillation_threshold: 0.06
+    oscillation_window: 20
+
+    sync_gain: 0.0
+    position_feed_forward_gain: 0.0
+    velocity_feed_forward_gain: 0.0
+    load_compensation_gain: 0.1
+    max_torque: 5.0
 
 Value_Broadcaster:
   ros__parameters:
     forward_list:
-      - /gantry/control_angle
-      - /gantry/left/angle
-      - /gantry/left/velocity 
-      - /gantry/right/angle 
-      - /gantry/right/velocity
-      - /gantry/left/filtered_velocity
-      - /gantry/right/filtered_velocity
-      - /gantry/left/control_torque
-      - /gantry/right/control_torque
-      
-      
+      - "/gantry/control/angle"
+      - "/gantry/left/angle"
+      - "/gantry/left/velocity"
+      - "/gantry/right/angle"
+      - "/gantry/right/velocity"
+      - "/gantry/left/filtered_velocity"
+      - "/gantry/right/filtered_velocity"
+      - "/gantry/yaw/filtered_velocity"
+      - "/gantry/left/control_torque"
+      - "/gantry/right/control_torque"
+      - "/gantry/yaw/control_torque"

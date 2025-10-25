@@ -27,9 +27,15 @@ public:
     }
     ~Gantry() override = default;
 
-    void command_update() { bottom_board_->command_update(); }
-    void before_updating() override { bottom_board_->before_updating(); }
-    void update() override { bottom_board_->update(); }
+    void command_update() { 
+        bottom_board_->command_update(); 
+    }
+    void before_updating() override { 
+        bottom_board_->before_updating(); 
+    }
+    void update() override {
+        bottom_board_->update(); 
+    }
 
 private:
     class GantryCommand : public rmcs_executor::Component {
@@ -57,6 +63,10 @@ private:
                        .enable_multi_turn_angle()
                        .set_reversed()},
                   {gantry, gantry_command, "/gantry/right",
+                   device::DjiMotor::Config{device::DjiMotor::Type::M2006}
+                       .enable_multi_turn_angle()
+                       .set_reversed()},
+                  {gantry, gantry_command, "/gantry/yaw",
                    device::DjiMotor::Config{device::DjiMotor::Type::M2006}
                        .enable_multi_turn_angle()
                        .set_reversed()})
@@ -90,7 +100,7 @@ private:
                 can_commands[i+2] = gantry_motors_[i].generate_command();
             transmit_buffer_.add_can1_transmission(0x200, std::bit_cast<uint64_t>(can_commands));
 
-            can_commands[0] = 0;
+            can_commands[0] = gantry_motors_[2].generate_command();
             can_commands[1] = 0;
             can_commands[2] = 0;
             can_commands[3] = 0;
@@ -127,7 +137,9 @@ private:
                 gantry_motors_[0].store_status(can_data);
             } else if (can_id == 0x204) {
                 gantry_motors_[1].store_status(can_data);
-            }
+            } else if (can_id == 0x205) {  // 记得修改成实际id
+            gantry_motors_[2].store_status(can_data);  
+        }
         }
         void dbus_receive_callback(const std::byte* uart_data, uint8_t uart_data_length) override {
             dr16_.store_status(uart_data, uart_data_length);
@@ -135,7 +147,7 @@ private:
 
         rclcpp::Logger logger_;
         rmcs_core::hardware::device::Dr16 dr16_;
-        rmcs_core::hardware::device::DjiMotor gantry_motors_[2];
+        rmcs_core::hardware::device::DjiMotor gantry_motors_[3];
         librmcs::client::CBoard::TransmitBuffer transmit_buffer_;
         std::thread event_thread_;
     };

@@ -28,7 +28,9 @@ public:
         register_input("/remote/switch/right",   switch_right_);
         register_input("/remote/switch/left",    switch_left_);
         register_input("/gantry/left/angle",     left_motor_angle_);
+        register_input("/gantry/yaw/angle",      yaw_motor_angle_);
         register_output("/gantry/control/angle", gantry_control_angle_);
+        register_output("/yaw/control/angle",    yaw_control_angle_);
     }
 
     void before_updating() override {
@@ -80,6 +82,7 @@ public:
 private:
     void reset_all_controls() {
         *gantry_control_angle_ = nan;
+        *yaw_control_angle_ = nan;
     }
 
     void update_place_control() {
@@ -92,11 +95,15 @@ private:
                 } else if(*switch_left_ != Switch::DOWN) {
                     *gantry_control_angle_ = 0.0;
                 }
+                *yaw_control_angle_ = *yaw_motor_angle_;
             } break;
             case SwitchMode::UNLOCKED: {
                 double increment = (*joystick_left_).x();
+                double yaw_increment = (*joystick_right_).x(); 
                 RCLCPP_INFO(this->get_logger(), "increment = %f", increment);
+                RCLCPP_INFO(this->get_logger(), "yaw_increment = %f", yaw_increment);
                 *gantry_control_angle_ += place_translate_to_angle(increment);
+                *yaw_control_angle_ += place_translate_to_angle(yaw_increment);
             } break;
         }
     }
@@ -117,15 +124,15 @@ private:
 
     static constexpr double inf = std::numeric_limits<double>::infinity();
     static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
-    double max_angle_difference;
     rclcpp::Logger logger_;
     InputInterface<Eigen::Vector2d> joystick_right_;
     InputInterface<Eigen::Vector2d> joystick_left_;
     InputInterface<rmcs_msgs::Switch> switch_right_;
     InputInterface<rmcs_msgs::Switch> switch_left_;
     InputInterface<double> left_motor_angle_;
-    InputInterface<double> right_motor_angle_;
+    InputInterface<double> yaw_motor_angle_;
     OutputInterface<double> gantry_control_angle_;
+    OutputInterface<double> yaw_control_angle_;
 
     rmcs_msgs::Switch last_switch_right_ = rmcs_msgs::Switch::UNKNOWN;
     rmcs_msgs::Switch last_switch_left_  = rmcs_msgs::Switch::UNKNOWN;
