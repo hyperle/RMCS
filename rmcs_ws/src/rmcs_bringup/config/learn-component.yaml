@@ -7,8 +7,6 @@ rmcs_executor:
       - rmcs_core::broadcaster::ValueBroadcaster -> value_broadcaster
 
 
-
-
 sin_cos_generator:
   ros__parameters:
     omega: 10.0

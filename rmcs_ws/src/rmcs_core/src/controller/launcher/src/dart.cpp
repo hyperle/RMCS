@@ -1,4 +1,4 @@
-#include "dart_state.hpp"
+#include "../include/dart_state.hpp"
 #include <rclcpp/logger.hpp>
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
@@ -184,7 +184,7 @@ Eigen::Vector3d DartModel::getEulerAngles() const {
     double pitch = std::asin(-rotation_matrix(2, 0));
     double yaw = std::atan2(rotation_matrix(1, 0), rotation_matrix(0, 0));
     
-    return Eigen::Vector3d(roll, pitch, yaw);
+    return {roll, pitch, yaw};
 }
 
 bool DartModel::isAttitudeValid() const {

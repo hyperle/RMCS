@@ -16,66 +16,72 @@ gantry_controller:
 
 gantry_information:
   ros__parameters:
-  # 位置环（位置→速度）
-    left_motor_angle_to_velocity_kp: 0.0
-    left_motor_angle_to_velocity_ki: 0.00
-    left_motor_angle_to_velocity_kd: 0.00
-    left_motor_angle_to_velocity_integral_min: -1000.0
-    left_motor_angle_to_velocity_integral_max: 1000.0
-    left_motor_angle_to_velocity_output_min: -100.0
-    left_motor_angle_to_velocity_output_max: 100.0
+    left_position_kp: 1.2
+    left_position_ki: 0.003
+    left_position_kd: 0.08
+    left_position_integral_min: -3.0
+    left_position_integral_max: 3.0
+    left_position_output_min: -15.0
+    left_position_output_max: 15.0
 
-    right_motor_angle_to_velocity_kp: 0.0
-    right_motor_angle_to_velocity_ki: 0.00
-    right_motor_angle_to_velocity_kd: 0.00
-    right_motor_angle_to_velocity_integral_min: -1000.0
-    right_motor_angle_to_velocity_integral_max: 1000.0
-    right_motor_angle_to_velocity_output_min: -100.0
-    right_motor_angle_to_velocity_output_max: 100.0
+    right_position_kp: 1.2
+    right_position_ki: 0.003
+    right_position_kd: 0.08
+    right_position_integral_min: -3.0
+    right_position_integral_max: 3.0
+    right_position_output_min: -15.0
+    right_position_output_max: 15.0
 
-    yaw_motor_angle_to_velocity_kp: 2.0
-    yaw_motor_angle_to_velocity_ki: 0.01
-    yaw_motor_angle_to_velocity_kd: 0.01
-    yaw_motor_angle_to_velocity_integral_min: -1000.0
-    yaw_motor_angle_to_velocity_integral_max: 1000.0
-    yaw_motor_angle_to_velocity_output_min: -100.0
-    yaw_motor_angle_to_velocity_output_max: 100.0
+    yaw_position_kp: 0.6
+    yaw_position_ki: 0.001
+    yaw_position_kd: 0.04
+    yaw_position_integral_min: -2.0
+    yaw_position_integral_max: 2.0
+    yaw_position_output_min: -8.0
+    yaw_position_output_max: 8.0
 
-    # 速度环（速度→扭矩）
-    left_motor_velocity_to_torques_kp: 2.5
-    left_motor_velocity_to_torques_ki: 0.016
-    left_motor_velocity_to_torques_kd: 0.02
-    left_motor_velocity_to_torques_integral_min: -1000.0
-    left_motor_velocity_to_torques_integral_max: 1000.0
-    left_motor_velocity_to_torques_output_min: -100.0
-    left_motor_velocity_to_torques_output_max: 100.0
+    # 内环速度控制PID - 较快响应，保证动态性能
+    left_velocity_kp: 1.5
+    left_velocity_ki: 0.01
+    left_velocity_kd: 0.05
+    left_velocity_integral_min: -5.0
+    left_velocity_integral_max: 5.0
+    left_velocity_output_min: -8.0
+    left_velocity_output_max: 8.0
 
-    right_motor_velocity_to_torques_kp: 2.5
-    right_motor_velocity_to_torques_ki: 0.016
-    right_motor_velocity_to_torques_kd: 0.02
-    right_motor_velocity_to_torques_integral_min: -1000.0
-    right_motor_velocity_to_torques_integral_max: 1000.0
-    right_motor_velocity_to_torques_output_min: -100.0
-    right_motor_velocity_to_torques_output_max: 100.0
+    right_velocity_kp: 1.5
+    right_velocity_ki: 0.01
+    right_velocity_kd: 0.05
+    right_velocity_integral_min: -5.0
+    right_velocity_integral_max: 5.0
+    right_velocity_output_min: -8.0
+    right_velocity_output_max: 8.0
 
-    yaw_motor_velocity_to_torques_kp: 0.8
-    yaw_motor_velocity_to_torques_ki: 0.01
-    yaw_motor_velocity_to_torques_kd: 0.01
-    yaw_motor_velocity_to_torques_integral_min: -1000.0
-    yaw_motor_velocity_to_torques_integral_max: 1000.0
-    yaw_motor_velocity_to_torques_output_min: -100.0
-    yaw_motor_velocity_to_torques_output_max: 100.0
+    yaw_velocity_kp: 0.8
+    yaw_velocity_ki: 0.005
+    yaw_velocity_kd: 0.02
+    yaw_velocity_integral_min: -3.0
+    yaw_velocity_integral_max: 3.0
+    yaw_velocity_output_min: -5.0
+    yaw_velocity_output_max: 5.0
 
-    dead_zone_duration: 15.0
-    gantry_oscillation_threshold: 0.03
-    yaw_oscillation_threshold: 0.06
-    oscillation_window: 20
+    # 同步控制PID
+    sync_kp: 0.8
+    sync_ki: 0.002
+    sync_kd: 0.03
+    sync_integral_min: -2.0
+    sync_integral_max: 2.0
+    sync_output_min: -3.0
+    sync_output_max: 3.0
 
-    sync_gain: 0.0
-    position_feed_forward_gain: 0.0
-    velocity_feed_forward_gain: 0.0
-    load_compensation_gain: 0.1
-    max_torque: 5.0
+    # 前馈和限制参数
+    position_ff_gain: 0.05
+    velocity_ff_gain: 0.08
+    max_torque: 8.0
+    max_sync_compensation: 2.0
+
+    # 振荡检测参数
+    oscillation_threshold_count: 5
 
 Value_Broadcaster:
   ros__parameters:

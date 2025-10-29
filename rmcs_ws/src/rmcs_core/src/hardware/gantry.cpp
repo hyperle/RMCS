@@ -13,7 +13,6 @@ namespace rmcs_core::hardware {
 class Gantry
     : public rmcs_executor::Component
     , public rclcpp::Node {
-
 public:
     Gantry()
         : Node{get_component_name(), rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true)}
@@ -127,12 +126,13 @@ private:
             bool is_remote_transmission, uint8_t can_data_length) override {
             if (is_extended_can_id || is_remote_transmission || can_data_length < 8) [[unlikely]]
                 return;
-
-            // if (can_id == 0x201) {
-            //     gantry_double_motors_[0].store_status(can_data);
-            // } else if (can_id == 0x202) {
-            //     gantry_double_motors_[1].store_status(can_data);
-            // }
+            
+            //下面的if逻辑可能需要被注释掉
+            if (can_id == 0x201) {
+                gantry_motors_[0].store_status(can_data);
+            } else if (can_id == 0x202) {
+                gantry_motors_[1].store_status(can_data);
+            }
             if (can_id == 0x203) {
                 gantry_motors_[0].store_status(can_data);
             } else if (can_id == 0x204) {

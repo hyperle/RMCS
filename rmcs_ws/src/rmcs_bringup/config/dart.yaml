@@ -1,0 +1,28 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+    - "rmcs_core::hardware::Dart -> dart"
+    - "rmcs_core::broadcaster::ValueBroadcaster -> Value_Broadcaster"
+
+dart:
+  ros__parameters:
+    usb_pid_top_board: -1
+    external_imu_port: external_imu_port
+    first_sample_time: 1.0
+    final_sample_time: 5.0
+
+Value_Broadcaster:
+  ros__parameters:
+    forward_list:
+      - "/tf"
+      - "/gimbal/state/roll"
+      - "/gimbal/state/pitch"
+      - "/gimbal/state/yaw"
+      - "/gimbal/state/filtered_roll"
+      - "/gimbal/state/filtered_pitch"
+      - "/gimbal/state/filtered_yaw"
+      - "/gimbal/state/quaternion_x"
+      - "/gimbal/state/quaternion_y"
+      - "/gimbal/state/quaternion_z"
+      - "/gimbal/state/quaternion_w"
