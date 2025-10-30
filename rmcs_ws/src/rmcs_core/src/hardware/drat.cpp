@@ -2,33 +2,88 @@
 #include <memory>
 #include <thread>
 #include <deque>
+#include <Eigen/Dense>
 
 #include <librmcs/client/cboard.hpp>
 #include <rclcpp/node.hpp>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_utility/fps_counter.hpp>
-#include <serial/serial.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include "hardware/device/bmi088.hpp"
-#include "hardware/device/hipnuc.hpp"
-#include "filter/low_pass_filter.hpp"
 
 namespace rmcs_core::hardware {
+
+class KalmanFilter {
+public:
+    explicit KalmanFilter(double dt = 0.001, double process_noise = 1e-5, double measurement_noise = 1e-3) 
+        : dt_(dt), process_noise_(process_noise), measurement_noise_(measurement_noise) {
+        
+        x_ = Eigen::Vector2d::Zero();
+        
+        F_ = Eigen::Matrix2d::Identity();
+        F_(0, 1) = dt_;
+        
+        H_ = Eigen::Matrix<double, 1, 2>::Zero();
+        H_(0, 0) = 1.0;
+        
+        Q_ = Eigen::Matrix2d::Identity() * process_noise;
+        
+        R_ = Eigen::Matrix<double, 1, 1>::Identity() * measurement_noise;
+        
+        P_ = Eigen::Matrix2d::Identity();
+    }
+    
+    void init(double angle, double angular_velocity = 0.0) {
+        x_ << angle, angular_velocity;
+        P_ = Eigen::Matrix2d::Identity();
+    }
+    
+    double update(double measurement) {
+        x_ = F_ * x_;
+        P_ = F_ * P_ * F_.transpose() + Q_;
+        
+        Eigen::Matrix<double, 1, 1> y = Eigen::Matrix<double, 1, 1>(measurement - H_ * x_);
+        Eigen::Matrix<double, 1, 1> S = H_ * P_ * H_.transpose() + R_;
+        Eigen::Matrix<double, 2, 1> K = P_ * H_.transpose() * S.inverse();
+        
+        x_ = x_ + K * y;
+        P_ = (Eigen::Matrix2d::Identity() - K * H_) * P_;
+        
+        return x_(0);
+    }
+    
+    double getAngle() const { return x_(0); }
+    double getAngularVelocity() const { return x_(1); }
+
+private:
+    double dt_;
+    double process_noise_;
+    double measurement_noise_;
+    
+    Eigen::Vector2d x_;
+    Eigen::Matrix2d F_;
+    Eigen::Matrix<double, 1, 2> H_;
+    Eigen::Matrix2d P_;
+    Eigen::Matrix2d Q_;
+    Eigen::Matrix<double, 1, 1> R_;
+};
 
 class Dart 
     : public rmcs_executor::Component
     , public rclcpp::Node {
 public:
     Dart()
-        : Node(
-              get_component_name(), 
-              rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true)) {
-        
-        command_component_ = create_partner_component<DartCommand>(get_component_name() + "_command", *this);
+        : Node{get_component_name(), rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true)}
+        , command_component_(
+              create_partner_component<DartCommand>(get_component_name() + "_command", *this)) {
         
         first_sample_time_ = this->get_parameter("first_sample_time").as_double();
         final_sample_time_ = this->get_parameter("final_sample_time").as_double();
+        
         register_output("/tf", tf_);
         
         top_board_ = std::make_unique<TopBoard>(
@@ -66,9 +121,9 @@ private:
             , dart_(dart)
             , tf_(dart.tf_)
             , imu_(1000, 0.2, 0.0)
-            , roll_filter_(20.0, 1000.0)
-            , pitch_filter_(20.0, 1000.0)
-            , yaw_filter_(20.0, 1000.0) {
+            , roll_kalman_(0.001, 1e-5, 1e-3)  // dt, process_noise, measurement_noise
+            , pitch_kalman_(0.001, 1e-5, 1e-3)
+            , yaw_kalman_(0.001, 1e-5, 1e-3) {
 
             dart.register_output("/gimbal/state/roll", gimbal_state_roll_);
             dart.register_output("/gimbal/state/pitch", gimbal_state_pitch_);
@@ -76,21 +131,15 @@ private:
             dart.register_output("/gimbal/state/filtered_roll", gimbal_state_filtered_roll_);
             dart.register_output("/gimbal/state/filtered_pitch", gimbal_state_filtered_pitch_);
             dart.register_output("/gimbal/state/filtered_yaw", gimbal_state_filtered_yaw_);
-            dart.register_output("/gimbal/state/quaternion_x", quaternion_x_);
-            dart.register_output("/gimbal/state/quaternion_y", quaternion_y_);
-            dart.register_output("/gimbal/state/quaternion_z", quaternion_z_);
-            dart.register_output("/gimbal/state/quaternion_w", quaternion_w_);
-
-            external_imu_thread_ = std::jthread([this, &dart](const std::stop_token& stop_token) {
-                external_imu_thread_main(
-                    stop_token, dart.get_parameter("external_imu_port").as_string(),
-                    dart.get_logger());
-            });
+            dart.register_output("/gimbal/state/kalman_roll", gimbal_state_kalman_roll_);
+            dart.register_output("/gimbal/state/kalman_pitch", gimbal_state_kalman_pitch_);
+            dart.register_output("/gimbal/state/kalman_yaw", gimbal_state_kalman_yaw_);
 
             event_thread_ = std::thread([this]() { handle_events(); });
-            
+            tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(dart_);
             start_time_ = std::chrono::steady_clock::now();
             calibration_complete_ = false;
+            kalman_initialized_ = false;
         }
 
         ~TopBoard() override {
@@ -98,50 +147,50 @@ private:
             if (event_thread_.joinable()) {
                 event_thread_.join();
             }
-            if (external_imu_thread_.joinable()) {
-                external_imu_thread_.request_stop();
-                external_imu_thread_.join();
-            }
         }
 
         void update() {
             imu_.update_status();
             Eigen::Quaterniond gimbal_imu_pose{imu_.q0(), imu_.q1(), imu_.q2(), imu_.q3()};
-        
-            if (external_imu_available_.load(std::memory_order::relaxed)) {
-                external_imu_.update_status();
-                gimbal_imu_pose = gimbal_imu_pose.slerp(0.001, external_imu_.quaternion());
-                imu_.q0() = gimbal_imu_pose.w();
-                imu_.q1() = gimbal_imu_pose.x();
-                imu_.q2() = gimbal_imu_pose.y();
-                imu_.q3() = gimbal_imu_pose.z();
-            }
 
-            Eigen::Quaterniond foxglove_pose = convertToFoxgloveFrame(gimbal_imu_pose);
-            Eigen::Vector3d euler_angles = quaternionToEuler(foxglove_pose);
+            tf_->set_transform<rmcs_description::PitchLink, rmcs_description::OdomImu>(
+                gimbal_imu_pose.conjugate());
+
+            Eigen::Vector3d euler_angles = quaternionToEuler(gimbal_imu_pose);
             
             *gimbal_state_roll_ = euler_angles.x();
             *gimbal_state_pitch_ = euler_angles.y();
             *gimbal_state_yaw_ = euler_angles.z();
             
-            double filtered_roll = roll_filter_.update(euler_angles.x());
-            double filtered_pitch = pitch_filter_.update(euler_angles.y());
-            double filtered_yaw = yaw_filter_.update(euler_angles.z());
-
-            auto compensated = applyDriftCompensation(filtered_roll, filtered_pitch, filtered_yaw);
+            if (!kalman_initialized_) {
+                roll_kalman_.init(euler_angles.x());
+                pitch_kalman_.init(euler_angles.y());
+                yaw_kalman_.init(euler_angles.z());
+                kalman_initialized_ = true;
+            }
+            
+            double kalman_roll = roll_kalman_.update(euler_angles.x());
+            double kalman_pitch = pitch_kalman_.update(euler_angles.y());
+            double kalman_yaw = yaw_kalman_.update(euler_angles.z());
+            
+            *gimbal_state_kalman_roll_ = kalman_roll;
+            *gimbal_state_kalman_pitch_ = kalman_pitch;
+            *gimbal_state_kalman_yaw_ = kalman_yaw;
+            
+            auto compensated = applyDriftCompensation(kalman_roll, kalman_pitch, kalman_yaw);
             
             *gimbal_state_filtered_roll_ = compensated.roll;
             *gimbal_state_filtered_pitch_ = compensated.pitch;
             *gimbal_state_filtered_yaw_ = compensated.yaw;
-            
-            *quaternion_x_ = foxglove_pose.x();
-            *quaternion_y_ = foxglove_pose.y();
-            *quaternion_z_ = foxglove_pose.z();
-            *quaternion_w_ = foxglove_pose.w();
+
+            tf_->set_state<rmcs_description::YawLink, rmcs_description::PitchLink>(compensated.yaw);
+
+            publishTfTransforms(gimbal_imu_pose, compensated.yaw, compensated.pitch);
 
             RCLCPP_DEBUG_THROTTLE(dart_.get_logger(), *dart_.get_clock(), 1000,
-                                "Angles - Raw: [%.3f, %.3f, %.3f], Filtered: [%.3f, %.3f, %.3f]",
+                                "Angles - Raw: [%.3f, %.3f, %.3f], Kalman: [%.3f, %.3f, %.3f], Compensated: [%.3f, %.3f, %.3f]",
                                 *gimbal_state_roll_, *gimbal_state_pitch_, *gimbal_state_yaw_,
+                                *gimbal_state_kalman_roll_, *gimbal_state_kalman_pitch_, *gimbal_state_kalman_yaw_,
                                 *gimbal_state_filtered_roll_, *gimbal_state_filtered_pitch_, *gimbal_state_filtered_yaw_);
         }
 
@@ -165,15 +214,11 @@ private:
                 
                 if (elapsed_seconds >= dart_.first_sample_time_ && !first_sample_recorded_) {
                     first_sample_recorded_ = true;
-                    RCLCPP_INFO(dart_.get_logger(), "First sample recorded - Roll: %.6f, Pitch: %.6f, Yaw: %.6f", 
-                               filtered_roll, filtered_pitch, filtered_yaw);
+                    RCLCPP_INFO(dart_.get_logger(), "First sample recorded");
                 }
                 
                 if (elapsed_seconds >= dart_.final_sample_time_ && !final_sample_recorded_) {
                     final_sample_recorded_ = true;
-                    RCLCPP_INFO(dart_.get_logger(), "Final sample recorded - Roll: %.6f, Pitch: %.6f, Yaw: %.6f", 
-                               filtered_roll, filtered_pitch, filtered_yaw);
-                    
                     calculateDriftCompensation();
                     calibration_complete_ = true;
                 }
@@ -192,12 +237,9 @@ private:
             if (!roll_samples_.empty() && !pitch_samples_.empty()) {
                 roll_bias_ = roll_samples_.back().value;
                 pitch_bias_ = pitch_samples_.back().value;
-                
-                RCLCPP_INFO(dart_.get_logger(), "Roll bias: %.6f, Pitch bias: %.6f", roll_bias_, pitch_bias_);
             }
             
             if (yaw_samples_.size() < 2) {
-                RCLCPP_WARN(dart_.get_logger(), "Not enough yaw samples for drift calculation");
                 yaw_drift_slope_ = 0.0;
                 yaw_bias_ = 0.0;
                 return;
@@ -217,12 +259,7 @@ private:
             if (std::abs(denominator) > 1e-10) {
                 yaw_drift_slope_ = (n * sum_xy - sum_x * sum_y) / denominator;
                 yaw_bias_ = yaw_samples_.back().value - yaw_drift_slope_ * yaw_samples_.back().time;
-                
-                RCLCPP_INFO(dart_.get_logger(), "Yaw drift slope: k = %.9f rad/s, bias: %.6f", 
-                           yaw_drift_slope_, yaw_bias_);
-                RCLCPP_INFO(dart_.get_logger(), "Drift compensation activated for all axes");
             } else {
-                RCLCPP_WARN(dart_.get_logger(), "Cannot calculate yaw drift slope - singular matrix");
                 yaw_drift_slope_ = 0.0;
                 yaw_bias_ = yaw_samples_.back().value;
             }
@@ -230,12 +267,6 @@ private:
             roll_samples_.clear();
             pitch_samples_.clear();
             yaw_samples_.clear();
-        }
-
-        static Eigen::Quaterniond convertToFoxgloveFrame(const Eigen::Quaterniond& imu_quat) {
-            Eigen::Quaterniond transform;
-            transform = Eigen::AngleAxisd(-M_PI/2, Eigen::Vector3d::UnitZ());
-            return transform * imu_quat;
         }
 
         static Eigen::Vector3d quaternionToEuler(const Eigen::Quaterniond& q) {
@@ -270,34 +301,98 @@ private:
             imu_.store_gyroscope_status(x, y, z);
         }
 
-        void external_imu_thread_main(
-            const std::stop_token& stop_token, const std::string& port_name,
-            const rclcpp::Logger& logger) {
-            try {
-                serial::Serial serial{port_name, 115200, serial::Timeout::simpleTimeout(10)};
-                rmcs_utility::FpsCounter fps_counter;
-
-                while (!stop_token.stop_requested()) {
-                    if (external_imu_.store_status<uint8_t>(serial) && fps_counter.count()) {
-                        bool available = fps_counter.fps() > 350.0;
-                        if (!available)
-                            RCLCPP_WARN(logger, "External IMU low FPS: %.2f", fps_counter.fps());
-                        else if (!external_imu_available_.load(std::memory_order::relaxed))
-                            RCLCPP_INFO(
-                                logger, "External IMU now available with FPS: %.2f", 
-                                fps_counter.fps());
-                        external_imu_available_.store(available, std::memory_order::relaxed);
-                    }  
-                }
-            } catch (const std::exception& e) {
-                external_imu_available_.store(false, std::memory_order::relaxed);
-                RCLCPP_ERROR(logger, "Exception in external IMU thread: %s", e.what());
-            }
-        }
+        // 添加 TF 发布方法
+        void publishTfTransforms(const Eigen::Quaterniond& imu_quaternion, double yaw_angle, double pitch_angle) {
+            // 创建 TF 广播器（如果尚未创建）
+            static std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_ = 
+                std::make_unique<tf2_ros::TransformBroadcaster>(dart_);
+            
+            auto now = dart_.get_clock()->now();
+            
+            // 发布 base_link -> gimbal_center_link 变换
+            geometry_msgs::msg::TransformStamped base_to_gimbal;
+            base_to_gimbal.header.stamp = now;
+            base_to_gimbal.header.frame_id = "base_link";
+            base_to_gimbal.child_frame_id = "gimbal_center_link";
+            base_to_gimbal.transform.translation.x = 0.0;
+            base_to_gimbal.transform.translation.y = 0.0;
+            base_to_gimbal.transform.translation.z = 0.1; // 假设云台中心在基座上方10cm
+            base_to_gimbal.transform.rotation.x = 0.0;
+            base_to_gimbal.transform.rotation.y = 0.0;
+            base_to_gimbal.transform.rotation.z = 0.0;
+            base_to_gimbal.transform.rotation.w = 1.0;
+            tf_broadcaster_->sendTransform(base_to_gimbal);
+            
+            // 发布 gimbal_center_link -> yaw_link 变换
+            geometry_msgs::msg::TransformStamped gimbal_to_yaw;
+            gimbal_to_yaw.header.stamp = now;
+            gimbal_to_yaw.header.frame_id = "gimbal_center_link";
+            gimbal_to_yaw.child_frame_id = "yaw_link";
+            gimbal_to_yaw.transform.translation.x = 0.0;
+            gimbal_to_yaw.transform.translation.y = 0.0;
+            gimbal_to_yaw.transform.translation.z = 0.0;
+            
+            // Yaw 旋转（绕 Z 轴）- 正确转换为四元数
+            Eigen::AngleAxisd yaw_axis(yaw_angle, Eigen::Vector3d::UnitZ());
+            Eigen::Quaterniond yaw_quat(yaw_axis);
+            gimbal_to_yaw.transform.rotation.x = yaw_quat.x();
+            gimbal_to_yaw.transform.rotation.y = yaw_quat.y();
+            gimbal_to_yaw.transform.rotation.z = yaw_quat.z();
+            gimbal_to_yaw.transform.rotation.w = yaw_quat.w();
+            tf_broadcaster_->sendTransform(gimbal_to_yaw);
+            
+            // 发布 yaw_link -> pitch_link 变换
+            geometry_msgs::msg::TransformStamped yaw_to_pitch;
+            yaw_to_pitch.header.stamp = now;
+            yaw_to_pitch.header.frame_id = "yaw_link";
+            yaw_to_pitch.child_frame_id = "pitch_link";
+            yaw_to_pitch.transform.translation.x = 0.0;
+            yaw_to_pitch.transform.translation.y = 0.0;
+            yaw_to_pitch.transform.translation.z = 0.05; // 假设 Pitch 关节在 Yaw 关节上方5cm
+            
+            // Pitch 旋转（绕 Y 轴）- 正确转换为四元数
+            Eigen::AngleAxisd pitch_axis(pitch_angle, Eigen::Vector3d::UnitY());
+            Eigen::Quaterniond pitch_quat(pitch_axis);
+            yaw_to_pitch.transform.rotation.x = pitch_quat.x();
+            yaw_to_pitch.transform.rotation.y = pitch_quat.y();
+            yaw_to_pitch.transform.rotation.z = pitch_quat.z();
+            yaw_to_pitch.transform.rotation.w = pitch_quat.w();
+            tf_broadcaster_->sendTransform(yaw_to_pitch);
+            
+            // 发布 pitch_link -> odom_imu 变换
+            geometry_msgs::msg::TransformStamped pitch_to_imu;
+            pitch_to_imu.header.stamp = now;
+            pitch_to_imu.header.frame_id = "pitch_link";
+            pitch_to_imu.child_frame_id = "odom_imu";
+            pitch_to_imu.transform.translation.x = 0.0;
+            pitch_to_imu.transform.translation.y = 0.0;
+            pitch_to_imu.transform.translation.z = 0.0;
+            
+            // 使用 IMU 四元数
+            pitch_to_imu.transform.rotation.x = imu_quaternion.x();
+            pitch_to_imu.transform.rotation.y = imu_quaternion.y();
+            pitch_to_imu.transform.rotation.z = imu_quaternion.z();
+            pitch_to_imu.transform.rotation.w = imu_quaternion.w();
+            tf_broadcaster_->sendTransform(pitch_to_imu);
+            
+            // 发布固定坐标系（世界坐标系）
+            geometry_msgs::msg::TransformStamped world_to_base;
+            world_to_base.header.stamp = now;
+            world_to_base.header.frame_id = "world";
+            world_to_base.child_frame_id = "base_link";
+            world_to_base.transform.translation.x = 0.0;
+            world_to_base.transform.translation.y = 0.0;
+            world_to_base.transform.translation.z = 0.0;
+            world_to_base.transform.rotation.x = 0.0;
+            world_to_base.transform.rotation.y = 0.0;
+            world_to_base.transform.rotation.z = 0.0;
+            world_to_base.transform.rotation.w = 1.0;
+            tf_broadcaster_->sendTransform(world_to_base);
+}
 
         struct AxisSample {
-            double time;    // 时间（秒）
-            double value;   // 角度值（弧度）
+            double time;
+            double value;
         };
         
         std::deque<AxisSample> roll_samples_;
@@ -305,17 +400,19 @@ private:
         std::deque<AxisSample> yaw_samples_;
         std::chrono::steady_clock::time_point start_time_;
         
-        double roll_bias_;
-        double pitch_bias_;
-        double yaw_drift_slope_;
-        double yaw_bias_;
+        double roll_bias_ = 0.0;
+        double pitch_bias_ = 0.0;
+        double yaw_drift_slope_ = 0.0;
+        double yaw_bias_ = 0.0;
         
         bool calibration_complete_ = false;
         bool first_sample_recorded_ = false;
         bool final_sample_recorded_ = false;
+        bool kalman_initialized_ = false;
 
         Dart& dart_;
         OutputInterface<rmcs_description::Tf>& tf_;
+        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
         device::Bmi088 imu_;
 
@@ -325,20 +422,15 @@ private:
         OutputInterface<double> gimbal_state_filtered_roll_;
         OutputInterface<double> gimbal_state_filtered_pitch_;
         OutputInterface<double> gimbal_state_filtered_yaw_;
-        OutputInterface<double> quaternion_x_;
-        OutputInterface<double> quaternion_y_;
-        OutputInterface<double> quaternion_z_;
-        OutputInterface<double> quaternion_w_;
+        OutputInterface<double> gimbal_state_kalman_roll_;
+        OutputInterface<double> gimbal_state_kalman_pitch_;
+        OutputInterface<double> gimbal_state_kalman_yaw_;
 
         std::thread event_thread_;
 
-        rmcs_core::hardware::device::Hipnuc external_imu_;
-        std::atomic<bool> external_imu_available_ = false;
-        std::jthread external_imu_thread_;
-
-        filter::LowPassFilter<1> roll_filter_;
-        filter::LowPassFilter<1> pitch_filter_;
-        filter::LowPassFilter<1> yaw_filter_;
+        KalmanFilter roll_kalman_;
+        KalmanFilter pitch_kalman_;
+        KalmanFilter yaw_kalman_;
     };
     
     double first_sample_time_;
