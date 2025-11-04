@@ -1,4 +1,4 @@
-#include <memory>
+/*#include <memory>
 #include <thread>
 #include <vector>
 #include <numeric>
@@ -60,7 +60,7 @@ private:
             , first_s_(dart.first_sample_spot_)
             , final_s_(dart.final_sample_spot_)
             , quaternion_filter_(15.0, 1000.0)  // 四元数贝叶斯滤波
-            , quaternion_smoother_(10.0, 1000.0) // 后处理平滑滤波
+            , quaternion_smoother_(5.0, 1000.0) // 后处理平滑滤波
             {
 
             registerOutputs();
@@ -356,4 +356,4 @@ private:
 } // namespace rmcs_core::hardware
 
 #include <pluginlib/class_list_macros.hpp>
-PLUGINLIB_EXPORT_CLASS(rmcs_core::hardware::Dart, rmcs_executor::Component)
+PLUGINLIB_EXPORT_CLASS(rmcs_core::hardware::Dart, rmcs_executor::Component)*/

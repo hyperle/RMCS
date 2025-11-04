@@ -6,7 +6,7 @@
 #include <array>
 #include <cmath>
 
-namespace rmcs_core::dart {
+namespace rmcs_core::controller::dart {
 
 class DartModel {
 public:
@@ -78,7 +78,6 @@ private:
     };
 };
 
-// 坐标转换工具类
 class CoordinateTransformer {
 public:
     CoordinateTransformer() = delete; // 纯静态工具类

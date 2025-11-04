@@ -1,0 +1,19 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - "rmcs_core::hardware::Launcher -> launcher_hardware"
+      - "rmcs_core::controller::LauncherController -> launcher_controller"
+      - "rmcs_core::broadcaster::ValueBroadcaster -> Value_Broadcaster"
+
+launcher_hardware:
+  ros__parameters:
+    usb_pid_bottom_board: -1
+
+launcher_controller:
+  ros__parameters: {}
+
+Value_Broadcaster:
+  ros__parameters:
+    forward_list:
+      - "/launcher/control/yaw_angle"

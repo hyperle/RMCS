@@ -3,8 +3,20 @@
 #include <rmcs_executor/component.hpp>
 #include "filter/low_pass_filter.hpp"
 #include "controller/pid/pid_calculator.hpp" 
+#include "controller/launcher/include/velocity_calculater.hpp"
 
 namespace rmcs_core::controller {
+
+enum class LauncherState : uint8_t {
+    LOCKED    = 0,
+    UNLOCKED  = 1,
+    LOADING   = 2, 
+    RESETTING = 3,
+    FILLING   = 4,
+    HOOKOFF   = 5,
+    LAUNCHING = 6,
+    ORIGEN    = 7
+};
 
 class LauncherInformation
     : public rmcs_executor::Component
@@ -18,7 +30,6 @@ public:
         , yaw_velocity_filter_(20.0, 1000.0)
         , launch_velocity_filter_(20.0, 1000.0) {     
         
-        // 设置PID参数
         auto set_pid_parameter = [this](pid::PidCalculator& pid, const std::string& name) {
             pid.kp = get_parameter(name + "_kp").as_double();
             pid.ki = get_parameter(name + "_ki").as_double();
@@ -36,14 +47,13 @@ public:
         set_pid_parameter(launch_position_pid_, "launch_position");
         set_pid_parameter(launch_velocity_pid_, "launch_velocity");
         
-        // 振荡检测参数
         yaw_torque_oscillation_threshold_ = get_parameter("yaw_torque_oscillation_threshold").as_double();
         yaw_deadzone_duration_ = get_parameter("yaw_deadzone_duration").as_double();
         yaw_oscillation_window_ = get_parameter("yaw_oscillation_window").as_int();
         
         yaw_torque_history_.resize(yaw_oscillation_window_, 0.0);
         
-        // 注册输入输出接口
+        register_input("/launcher/aim/target", target_);
         register_input("/launcher/control/yaw_angle", yaw_control_angle_);
         register_input("/launcher/control/launch_position", launch_control_position_);
         register_input("/launcher/yaw/angle", yaw_motor_angle_);
@@ -61,20 +71,17 @@ public:
     }
 
     void update() override {
-        // 检查输入有效性
         if (std::isnan(*yaw_control_angle_) || std::isnan(*launch_control_position_)) {
             reset_all_controls();
             return;
         }
 
-        // 检测新的控制输入
         bool new_yaw_input = (std::abs(*yaw_control_angle_ - last_yaw_control_angle_) > 0.001);
         bool new_launch_input = (std::abs(*launch_control_position_ - last_launch_control_position_) > 0.001);
         
         last_yaw_control_angle_ = *yaw_control_angle_;
         last_launch_control_position_ = *launch_control_position_;
         
-        // 处理死区逻辑
         if ((new_yaw_input || new_launch_input) && yaw_deadzone_active_) {
             RCLCPP_INFO(get_logger(), "New control input detected, exiting yaw deadzone");
             yaw_deadzone_active_ = false;
@@ -91,12 +98,15 @@ public:
                 activate_yaw_deadzone();
             }
         }
+        dart::VelocityCalculator calculator;
+        // 调试参数
+        calculator.set_spring_constant(250.0);  // 调整弹簧劲度系数
+        calculator.set_dart_mass(0.06);         // 调整飞镖质量
     }
     
 private:
     void handle_yaw_deadzone() {
         *yaw_motor_control_torque_ = 0.0;
-        // 发射电机不受yaw死区影响
         
         if (yaw_deadzone_start_time_ != rclcpp::Time(0, 0, RCL_ROS_TIME)) {
             double deadzone_elapsed = (now() - yaw_deadzone_start_time_).seconds();
@@ -159,11 +169,9 @@ private:
     void compute_pid_control() {
         process_sensor_data();
         
-        // Yaw轴控制：角度环 + 速度环
         double yaw_target_velocity = yaw_angle_pid_.update(*yaw_control_angle_ - *yaw_motor_angle_);
         *yaw_motor_control_torque_ = yaw_velocity_pid_.update(yaw_target_velocity - *yaw_motor_filtered_velocity_);
         
-        // 发射机构控制：位置环 + 速度环
         double launch_target_velocity = launch_position_pid_.update(*launch_control_position_ - *launch_motor_angle_);
         *launch_motor_control_torque_ = launch_velocity_pid_.update(launch_target_velocity - *launch_motor_filtered_velocity_);
         
@@ -173,9 +181,7 @@ private:
                             *launch_control_position_, *launch_motor_control_torque_);
     }
 
-    void reset_all_controls() {
-        *yaw_motor_control_torque_ = 0.0;
-        *launch_motor_control_torque_ = 0.0;
+    void reset_all_controls() {//
     }
 
     void process_sensor_data() {
@@ -186,15 +192,12 @@ private:
 private: 
     rclcpp::Logger logger_;
     
-    // 滤波器
     filter::LowPassFilter<1> yaw_velocity_filter_;
     filter::LowPassFilter<1> launch_velocity_filter_;
     
-    // PID控制器
     pid::PidCalculator yaw_angle_pid_, yaw_velocity_pid_;
     pid::PidCalculator launch_position_pid_, launch_velocity_pid_;
 
-    // 振荡检测参数
     double yaw_torque_oscillation_threshold_;
     double yaw_deadzone_duration_;
     int yaw_oscillation_window_;    
@@ -202,17 +205,15 @@ private:
     rclcpp::Time yaw_deadzone_start_time_;
     std::vector<double> yaw_torque_history_;
     
-    // 上次控制值
     double last_yaw_control_angle_;
     double last_launch_control_position_;
 
-    // 输入接口
+    InputInterface<double> target_;
     InputInterface<double> yaw_control_angle_;
     InputInterface<double> launch_control_position_;
     InputInterface<double> yaw_motor_angle_, yaw_motor_velocity_;
     InputInterface<double> launch_motor_angle_, launch_motor_velocity_;
 
-    // 输出接口
     OutputInterface<double> yaw_motor_filtered_velocity_;
     OutputInterface<double> launch_motor_filtered_velocity_;
     OutputInterface<double> yaw_motor_control_torque_;

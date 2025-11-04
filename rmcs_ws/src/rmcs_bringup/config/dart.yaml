@@ -9,8 +9,9 @@ dart:
   ros__parameters:
     usb_pid_top_board: -1
     external_imu_port: external_imu_port
-    first_sample_time: 1.0
-    final_sample_time: 5.0
+    imu_sensitivity: 2.0
+    first_sample_spot: 1.0
+    final_sample_spot: 5.0
 
 Value_Broadcaster:
   ros__parameters:
@@ -19,10 +20,7 @@ Value_Broadcaster:
       - "/gimbal/state/roll"
       - "/gimbal/state/pitch"
       - "/gimbal/state/yaw"
-      - "/gimbal/state/filtered_roll"
-      - "/gimbal/state/filtered_pitch"
+      - "/gimbal/state/final_roll"
+      - "/gimbal/state/final_pitch"
       - "/gimbal/state/filtered_yaw"
-      - "/gimbal/state/quaternion_x"
-      - "/gimbal/state/quaternion_y"
-      - "/gimbal/state/quaternion_z"
-      - "/gimbal/state/quaternion_w"
+      - "/gimbal/state/final_yaw"

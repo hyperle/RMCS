@@ -127,7 +127,6 @@ private:
             if (is_extended_can_id || is_remote_transmission || can_data_length < 8) [[unlikely]]
                 return;
             
-            //下面的if逻辑可能需要被注释掉
             if (can_id == 0x201) {
                 gantry_motors_[0].store_status(can_data);
             } else if (can_id == 0x202) {
